@@ -3,7 +3,12 @@
 import { useState } from "react";
 import axios from "axios";
 
-type ProcessingStep = "upload" | "extract" | "transcribe" | "summarize" | "complete";
+type ProcessingStep =
+  | "upload"
+  | "extract"
+  | "transcribe"
+  | "summarize"
+  | "complete";
 
 interface VideoData {
   id: string;
@@ -24,18 +29,19 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
 
-  const API_URL = "http://localhost:8080/api/videos";
+  // const API_URL = "http://localhost:8080/api/videos";
+  const API_URL = "https://ai-video-summarizer-ie74.onrender.com/api/videos";
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
-      
+
       // Validate file size (20MB limit)
       if (selectedFile.size > 20 * 1024 * 1024) {
         setError("File size exceeds 20MB limit");
         return;
       }
-      
+
       setFile(selectedFile);
       setError("");
     }
@@ -149,7 +155,7 @@ export default function Home() {
     { id: "complete", label: "Complete", icon: "✅" },
   ];
 
-  const getStepIndex = (step: ProcessingStep) => 
+  const getStepIndex = (step: ProcessingStep) =>
     steps.findIndex((s) => s.id === step);
 
   return (
@@ -173,7 +179,9 @@ export default function Home() {
               <div
                 className="h-full bg-indigo-600 transition-all duration-500"
                 style={{
-                  width: `${(getStepIndex(currentStep) / (steps.length - 1)) * 100}%`,
+                  width: `${
+                    (getStepIndex(currentStep) / (steps.length - 1)) * 100
+                  }%`,
                 }}
               />
             </div>
@@ -183,7 +191,10 @@ export default function Home() {
               const isCurrent = currentStep === step.id;
 
               return (
-                <div key={step.id} className="flex flex-col items-center relative">
+                <div
+                  key={step.id}
+                  className="flex flex-col items-center relative"
+                >
                   <div
                     className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl transition-all duration-300 ${
                       isActive
@@ -465,10 +476,6 @@ export default function Home() {
     </main>
   );
 }
-
-
-
-
 
 // "use client";
 
