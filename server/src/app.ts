@@ -57,7 +57,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import { errorHandler } from "./middleware/error.middleware";
-import videoRoutes from "../src/routes/video.routes"
+import videoRoutes from "./routes/video.routes"
 
 // dotenv.config({
 //   path: "./.env",
