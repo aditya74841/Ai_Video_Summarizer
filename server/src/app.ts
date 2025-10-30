@@ -80,7 +80,7 @@ app.use(limiter);
 
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN! || "http://localhost:3000", // use env, fallback for dev
+    origin: ["ai-video-summarizer-qrmb.vercel.app","http://localhost:3000"],
     credentials: true,
   })
 );
