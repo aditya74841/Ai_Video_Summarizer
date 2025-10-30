@@ -104,7 +104,14 @@ app.get("/health-check", (req: Request, res: Response) => {
     message: "Server is running",
   });
 });
-
+app.get("/", (req: Request, res: Response) => {
+  res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    message: "Server is running",
+  });
+});
 // Error Handler (should be last)
 app.use(errorHandler);
 
