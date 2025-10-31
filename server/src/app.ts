@@ -80,11 +80,14 @@ app.use(limiter);
 
 app.use(
   cors({
-    origin: ["ai-video-summarizer-qrmb.vercel.app","http://localhost:3000"],
+    origin: [
+      "https://ai-video-summarizer-qrmb.vercel.app",
+      "https://ai-video-summarizer-red.vercel.app",
+      "http://localhost:3000",
+    ],
     credentials: true,
   })
 );
-
 // Parse cookies so authentication middleware can read tokens set as cookies
 app.use(cookieParser());
 
