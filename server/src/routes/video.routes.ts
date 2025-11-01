@@ -25,6 +25,7 @@ import {
 //   listAvailableModels, 
   summarizeTranscript 
 } from "../controller/transcribe.controller";
+import { downloadYouTubeAudio } from "../controller/youtube.controller";
 
 const router = express.Router();
 
@@ -42,5 +43,7 @@ router.post("/summarize/:id", summarizeTranscript);
 
 // List available models
 // router.get("/models", listAvailableModels);
+
+router.post("/youtube/download", downloadYouTubeAudio);
 
 export default router;
