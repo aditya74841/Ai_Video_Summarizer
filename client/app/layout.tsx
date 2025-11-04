@@ -15,7 +15,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Video Summariser ",
-  description: "This is a video summariser app using AI built with Next.js and Gemini Api.",
+  description:
+    "This is a video summariser app using AI built with Next.js and Gemini Api.",
+  icons: {
+    icon: "/icon.svg", // or '/favicon.ico'
+  },
 };
 
 export default function RootLayout({
