@@ -34,6 +34,7 @@ app.use(
           "http://localhost:8080",
           "http://localhost:3000",
           "https://ai-video-summarizer-ie74.onrender.com",
+          "https://ai-video-summarizer-red.vercel.app",
           "blob:",
           "data:",
         ],
