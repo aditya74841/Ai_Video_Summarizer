@@ -8,9 +8,9 @@ const execPromise = util.promisify(exec);
 export const uploadVideo = async (req: Request, res: Response) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "No video file uploaded" 
+      return res.status(400).json({
+        success: false,
+        message: "No video file uploaded",
       });
     }
 
@@ -40,7 +40,7 @@ export const uploadVideo = async (req: Request, res: Response) => {
       success: true,
       message: "Video uploaded and validated successfully",
       video: {
-        id: doc._id,
+        _id: doc._id,
         title: doc.title,
         size: doc.size,
         duration: doc.duration,
@@ -57,13 +57,35 @@ export const uploadVideo = async (req: Request, res: Response) => {
   }
 };
 
+export const getVideoById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
 
+    if (!id) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Video ID is required" });
+    }
 
+    const video = await Video.findById(id).select("-__v -path");
 
+    if (!video) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
+    }
+
+    return res.status(200).json({ success: true, video });
+  } catch (error) {
+    console.error("Get video error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to retrieve video" });
+  }
+};
 
 // import { Request, Response } from "express";
 // import { Video } from "../model/video.model";
-
 
 // export const uploadVideo = async (req: Request, res: Response) => {
 //   if (!req.file) {
@@ -87,5 +109,3 @@ export const uploadVideo = async (req: Request, res: Response) => {
 //     video: doc,
 //   });
 // };
-
-

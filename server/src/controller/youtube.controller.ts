@@ -10,6 +10,8 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
   try {
     const { youtubeUrl, title } = req.body;
 
+    console.log("🔍 Validating YouTube URL...", youtubeUrl);
+
     if (!youtubeUrl) {
       return res.status(400).json({
         success: false,
@@ -60,7 +62,7 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
       size: 0, // We don't have size yet
       mimetype: "audio/wav",
       duration,
-      processingStatus: "downloading",
+      processingStatus: "audio_extracted",
       youtubeUrl: youtubeUrl,
     });
 
@@ -69,7 +71,7 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
     console.log("🎵 Downloading audio from YouTube...");
 
     // Download audio only with proper options
-     await ytdlp.downloadAsync(youtubeUrl, {
+    await ytdlp.downloadAsync(youtubeUrl, {
       format: {
         filter: "audioonly",
         quality: 9, // 0-10, where 0 is best quality
@@ -81,23 +83,30 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
       },
     });
 
-
     console.log("⏳ Verifying audio file...");
 
     // Verify audio file was created (with a small delay for file system)
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     if (!fs.existsSync(audioOutputPath)) {
       throw new Error("Audio file was not created successfully");
     }
 
     // Get file size
     const stats = fs.statSync(audioOutputPath);
-    console.log(`✅ Audio file created: ${audioOutputPath} (${stats.size} bytes)`);
+    console.log(
+      `✅ Audio file created: ${audioOutputPath} (${stats.size} bytes)`
+    );
+
+    const baseUrl =
+      process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const relativeAudioPath = `uploads/audio/${doc._id}.wav`;
+    const audioUrl = `${baseUrl}/${relativeAudioPath}`;
 
     // Update video document
     doc.audioPath = audioOutputPath;
     doc.size = stats.size;
+    doc.audioUrl = audioUrl;
     doc.processingStatus = "audio_extracted";
     await doc.save();
 
@@ -119,7 +128,9 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
 
     // Cleanup on error
     try {
-      const video = await Video.findOne({ youtubeUrl: req.body.youtubeUrl }).sort({ createdAt: -1 });
+      const video = await Video.findOne({
+        youtubeUrl: req.body.youtubeUrl,
+      }).sort({ createdAt: -1 });
       if (video) {
         video.processingStatus = "failed";
         await video.save();

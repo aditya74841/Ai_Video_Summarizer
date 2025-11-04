@@ -12,18 +12,16 @@
 // router.get("/models", listAvailableModels); // List available models
 // router.post("/summarize/:id", summarizeTranscript);
 
-
 // export default router;
 
-
 import express from "express";
-import { uploadVideo } from "../controller/video.controller";
+import { getVideoById, uploadVideo } from "../controller/video.controller";
 import { upload, validateFileType } from "../middleware/upload.middleware";
 import { extractAudio } from "../controller/audio.controller";
-import { 
-  transcribeAudio, 
-//   listAvailableModels, 
-  summarizeTranscript 
+import {
+  transcribeAudio,
+  //   listAvailableModels,
+  summarizeTranscript,
 } from "../controller/transcribe.controller";
 import { downloadYouTubeAudio } from "../controller/youtube.controller";
 
@@ -36,7 +34,7 @@ router.post("/upload", upload.single("video"), validateFileType, uploadVideo);
 router.post("/extract-audio/:id", extractAudio);
 
 // Transcribe (checks if audio exists)
-router.post("/transcribe/:id", transcribeAudio);
+router.get("/transcribe/:id", transcribeAudio);
 
 // Summarize (checks if transcript exists)
 router.post("/summarize/:id", summarizeTranscript);
@@ -45,5 +43,7 @@ router.post("/summarize/:id", summarizeTranscript);
 // router.get("/models", listAvailableModels);
 
 router.post("/youtube/download", downloadYouTubeAudio);
+
+router.get("/get-video/:id", getVideoById);
 
 export default router;

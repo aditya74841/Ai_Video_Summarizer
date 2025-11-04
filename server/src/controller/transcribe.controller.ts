@@ -84,6 +84,7 @@ export const transcribeAudio = async (req: Request, res: Response) => {
     const base64Audio = audioBuffer.toString("base64");
 
     const ai = getGenAI();
+    
     const model = ai.getGenerativeModel({
       model: "gemini-2.0-flash-exp",
     });
