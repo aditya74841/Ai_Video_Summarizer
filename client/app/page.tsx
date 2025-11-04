@@ -38,8 +38,8 @@ export default function Home() {
   const [videoURL, setVideoURL] = useState<string>("");
   const [isURLMode, setIsURLMode] = useState<boolean>(false);
 
-  const API_URL = "http://localhost:8080/api/videos";
-  // const API_URL = "https://ai-video-summarizer-ie74.onrender.com/api/videos";
+  // const API_URL = "http://localhost:8080/api/videos";
+  const API_URL = "https://ai-video-summarizer-ie74.onrender.com/api/videos";
 
   const steps = [
     { id: "upload", label: "Upload", icon: "📤", step: 1 },
