@@ -3,14 +3,14 @@ import { Video } from "../model/video.model";
 import { YtDlp } from "ytdlp-nodejs";
 import path from "path";
 import fs from "fs";
+import { getAudioMetadata } from "../utils/ffmpeg.util";
+import { sendProgress } from "../utils/progress.util";
 
 const ytdlp = new YtDlp();
 
 export const downloadYouTubeAudio = async (req: Request, res: Response) => {
   try {
     const { youtubeUrl, title } = req.body;
-
-    console.log("🔍 Validating YouTube URL...", youtubeUrl);
 
     if (!youtubeUrl) {
       return res.status(400).json({
@@ -28,10 +28,14 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
       });
     }
 
-    console.log("🎬 Fetching video info from YouTube...");
-
-    // Get video info
-    const videoInfo = await ytdlp.getInfoAsync(youtubeUrl);
+    // Get video info with player client workaround
+    const videoInfo = await ytdlp.getInfoAsync(youtubeUrl, {
+      additionalOptions: [
+        "--extractor-args",
+        "youtube:player_client=android,web",
+        "--no-warnings",
+      ],
+    } as any);
 
     if (videoInfo._type === "playlist") {
       return res.status(400).json({
@@ -41,13 +45,16 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
       });
     }
 
-    console.log("✅ Video info retrieved:", {
-      title: videoInfo.title,
-      duration: videoInfo.duration,
-    });
-
     const videoTitle = title || videoInfo.title;
     const duration = videoInfo.duration;
+
+    // Validate YouTube video duration (Maximum 12 minutes = 720 seconds)
+    if (duration && duration > 720) {
+      return res.status(400).json({
+        success: false,
+        message: `YouTube video duration (${Math.round(duration / 60)} mins) exceeds the maximum allowed limit of 12 minutes.`,
+      });
+    }
 
     // Create output directory for audio
     const audioDir = path.join(__dirname, "../../uploads/audio");
@@ -60,30 +67,48 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
       title: videoTitle,
       path: youtubeUrl, // Store YouTube URL instead of file path
       size: 0, // We don't have size yet
-      mimetype: "audio/wav",
+      mimetype: "audio/mp3",
       duration,
       processingStatus: "audio_extracted",
       youtubeUrl: youtubeUrl,
     });
 
-    const audioOutputPath = path.join(audioDir, `${doc._id}.wav`);
+    const audioOutputPath = path.join(audioDir, `${doc._id}.mp3`);
 
-    console.log("🎵 Downloading audio from YouTube...");
+    const ffmpegPath = require("ffmpeg-static");
 
-    // Download audio only with proper options
+    // Download audio only with proper options & YouTube player client override
+    // And use FFmpeg to convert to 16kHz mono MP3
     await ytdlp.downloadAsync(youtubeUrl, {
       format: {
         filter: "audioonly",
         quality: 9, // 0-10, where 0 is best quality
-        type: "wav",
+        type: "mp3",
       },
       output: audioOutputPath,
+      additionalOptions: [
+        "--extractor-args",
+        "youtube:player_client=android,web",
+        "--no-warnings",
+        "--ffmpeg-location",
+        ffmpegPath,
+        "--extract-audio",
+        "--audio-format",
+        "mp3",
+        "--postprocessor-args",
+        "-ar 16000 -ac 1"
+      ],
       onProgress: (progress) => {
-        console.log(`Download progress:`, progress);
+        if (progress.percentage) {
+          sendProgress(
+            doc._id.toString(),
+            "downloading",
+            Math.round(progress.percentage),
+            `Downloading YouTube Audio (${Math.round(progress.percentage)}%)`
+          );
+        }
       },
     });
-
-    console.log("⏳ Verifying audio file...");
 
     // Verify audio file was created (with a small delay for file system)
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -94,32 +119,36 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
 
     // Get file size
     const stats = fs.statSync(audioOutputPath);
-    console.log(
-      `✅ Audio file created: ${audioOutputPath} (${stats.size} bytes)`
-    );
 
     const baseUrl =
       process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-    const relativeAudioPath = `uploads/audio/${doc._id}.wav`;
+    const relativeAudioPath = `uploads/audio/${doc._id}.mp3`;
     const audioUrl = `${baseUrl}/${relativeAudioPath}`;
+
+    const metadata = await getAudioMetadata(audioOutputPath);
 
     // Update video document
     doc.audioPath = audioOutputPath;
     doc.size = stats.size;
     doc.audioUrl = audioUrl;
+    doc.sampleRate = metadata.sampleRate || 16000;
+    doc.channels = metadata.channels || 1;
+    doc.bitrate = metadata.bitrate;
     doc.processingStatus = "audio_extracted";
     await doc.save();
 
-    console.log("✅ Audio downloaded successfully");
+    sendProgress(doc._id.toString(), "audio_extracted", 100, "16kHz Mono Audio Extracted");
 
     return res.status(201).json({
       success: true,
       message: "Audio downloaded from YouTube successfully",
       video: {
+        _id: doc._id,
         id: doc._id,
         title: doc.title,
         duration: doc.duration,
         size: doc.size,
+        audioUrl: doc.audioUrl,
         processingStatus: doc.processingStatus,
       },
     });
@@ -138,7 +167,6 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
         // Delete audio file if it exists
         if (video.audioPath && fs.existsSync(video.audioPath)) {
           fs.unlinkSync(video.audioPath);
-          console.log("🗑️ Cleaned up partial audio file");
         }
       }
     } catch (cleanupError) {

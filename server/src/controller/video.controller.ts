@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 import { Video } from "../model/video.model";
 import { exec } from "child_process";
 import util from "util";
@@ -16,6 +17,14 @@ export const uploadVideo = async (req: Request, res: Response) => {
 
     const title = (req.body?.title as string) || req.file.originalname;
 
+    // Enforce 20MB file size limit
+    if (req.file.size > 20 * 1024 * 1024) {
+      return res.status(400).json({
+        success: false,
+        message: "File size exceeds the maximum allowed limit of 20MB.",
+      });
+    }
+
     // Get video duration using ffprobe
     let duration: number | undefined;
     try {
@@ -25,6 +34,14 @@ export const uploadVideo = async (req: Request, res: Response) => {
       duration = parseFloat(stdout.trim());
     } catch (error) {
       console.warn("Could not get video duration:", error);
+    }
+
+    // Enforce 12-minute duration limit (720 seconds)
+    if (duration && duration > 720) {
+      return res.status(400).json({
+        success: false,
+        message: `Video duration (${Math.round(duration / 60)} mins) exceeds the maximum allowed limit of 12 minutes.`,
+      });
     }
 
     const doc = await Video.create({
@@ -61,10 +78,10 @@ export const getVideoById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    if (!id) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return res
         .status(400)
-        .json({ success: false, message: "Video ID is required" });
+        .json({ success: false, message: "Valid Video ID is required" });
     }
 
     const video = await Video.findById(id).select("-__v -path");

@@ -1,0 +1,27 @@
+# Local workspace notes & scratch
+idea.md
+ida.md
+final.zip
+
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.*
+
+# Build outputs
+client/.next/
+client/out/
+server/dist/
+
+# Server uploads & temporary media files
+server/uploads/
+
+# OS / IDE files
+.DS_Store
+.qodo/
+*.log

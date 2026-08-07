@@ -3,147 +3,74 @@ import fs from "fs";
 import path from "path";
 import { Video } from "../model/video.model";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+// Add this import 👇
+import { GoogleAIFileManager } from "@google/generative-ai/server";
+import Groq from "groq-sdk";
+import { sendProgress } from "../utils/progress.util";
 
 let genAI: GoogleGenerativeAI | null = null;
-
-const getGenAI = (): GoogleGenerativeAI => {
-  if (!genAI) {
-    const googleApiKey = process.env.GOOGLE_API_KEY;
-    
-    if (!googleApiKey) {
-      throw new Error("GOOGLE_API_KEY is not set in environment variables");
-    }
-    
-    genAI = new GoogleGenerativeAI(googleApiKey);
-    console.log("✅ GoogleGenerativeAI initialized");
-  }
-  
-  return genAI;
-};
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 export const transcribeAudio = async (req: Request, res: Response) => {
   try {
-    console.log("🎤 Starting transcription process...");
     const { id } = req.params;
 
-    // Find video in database
     const video = await Video.findById(id);
-    
     if (!video) {
-      return res.status(404).json({
-        success: false,
-        message: "Video not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
 
-    // VALIDATION: Check if audio has been extracted
-    if (!video.audioPath) {
+    // Check if audio exists locally
+    if (!video.audioPath || !fs.existsSync(video.audioPath)) {
       return res.status(400).json({
         success: false,
-        message: "Audio not extracted. Please extract audio first using /extract-audio/:id endpoint",
-        processingStatus: video.processingStatus,
+        message: "Audio file not found. Run extract-audio first.",
       });
     }
 
-    // Check if already transcribed
-    if (video.transcript) {
-      // If already transcribed, ensure audio file is deleted
-      if (video.audioPath && fs.existsSync(video.audioPath)) {
-        fs.unlinkSync(video.audioPath);
-        console.log(`✅ Audio file deleted (already transcribed): ${video.audioPath}`);
-      }
-      
-      return res.status(200).json({
-        success: true,
-        message: "Video already transcribed, audio file removed",
-        transcript: video.transcript,
-        processingStatus: video.processingStatus,
-      });
-    }
+    sendProgress(id, "transcribing", 30, "Transcribing Audio with Whisper AI...");
 
-    // Verify audio file exists
-    const audioPath = path.resolve(video.audioPath);
-    if (!fs.existsSync(audioPath)) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Audio file not found on server" 
-      });
-    }
-
-    // Check audio file size (should be under 20MB for Base64 approach)
-    const stats = fs.statSync(audioPath);
-    if (stats.size > 20 * 1024 * 1024) {
-      return res.status(413).json({
-        success: false,
-        message: "Audio file too large for transcription (max 20MB)",
-      });
-    }
-
-    console.log("📖 Reading audio file:", audioPath);
-    const audioBuffer = fs.readFileSync(audioPath);
-    const base64Audio = audioBuffer.toString("base64");
-
-    const ai = getGenAI();
-    
-    const model = ai.getGenerativeModel({
-      model: "gemini-2.0-flash-exp",
+    const transcription = await groq.audio.transcriptions.create({
+      file: fs.createReadStream(video.audioPath),
+      model: "whisper-large-v3-turbo",
+      temperature: 0,
     });
 
-    console.log("🚀 Sending to Gemini for transcription...");
-    const result = await model.generateContent([
-      {
-        text: "Transcribe the following audio into clear and accurate text:",
-      },
-      {
-        inlineData: {
-          mimeType: "audio/wav",
-          data: base64Audio,
-        },
-      },
-    ]);
-
-    const transcription = result.response.text();
-    console.log("✅ Transcription completed");
-
-    // Save transcript to MongoDB
-    video.transcript = transcription;
+    // Save to DB
+    video.transcript = transcription.text;
     video.processingStatus = "transcribed";
     await video.save();
 
-    // ✅ DELETE AUDIO FILE AFTER SUCCESSFUL TRANSCRIPTION
-    if (video.audioPath && fs.existsSync(video.audioPath)) {
+    sendProgress(id, "transcribed", 100, "Transcription Completed");
+
+    // Cleanup: Delete local audio file
+    if (fs.existsSync(video.audioPath)) {
       fs.unlinkSync(video.audioPath);
-      console.log(`✅ Audio file deleted after transcription: ${video.audioPath}`);
     }
 
     res.status(200).json({
       success: true,
-      message: "Transcription completed successfully, audio file removed from server",
+      message: "Transcription complete",
       transcript: transcription,
-      processingStatus: video.processingStatus,
     });
   } catch (err: any) {
-    console.error("❌ Transcription error:", err.message || err);
+    console.error("Transcription error:", err.message || err);
     
-    // Update status to failed
-    try {
-      const video = await Video.findById(req.params.id);
-      if (video) {
-        video.processingStatus = "failed";
-        await video.save();
-        
-        // ✅ DELETE AUDIO FILE EVEN IF TRANSCRIPTION FAILS
-        if (video.audioPath && fs.existsSync(video.audioPath)) {
-          fs.unlinkSync(video.audioPath);
-          console.log(`🗑️ Audio file deleted after transcription error: ${video.audioPath}`);
-        }
-      }
-    } catch {}
+    // Catch Groq 413 Request Entity Too Large error
+    if (err.status === 413 || (err.message && err.message.includes("413")) || (err.message && err.message.includes("request_too_large"))) {
+      return res.status(413).json({
+        success: false,
+        message: "Audio file is too large for the Groq Whisper API (25MB max limit). Please choose a shorter video or smaller file size.",
+      });
+    }
 
     res.status(500).json({
       success: false,
       message: err.message || "Transcription failed",
-      error: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
 };
@@ -152,79 +79,141 @@ export const summarizeTranscript = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // Find video & check transcript
     const video = await Video.findById(id);
     if (!video) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Video not found" 
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Video not found" });
     }
 
-    // VALIDATION: Check if video has been transcribed
+    // Extract requested summary type ("short" or "detailed", default to "short")
+    const { editedTranscript, summaryType = "short" } = req.body || {};
+    const mode = summaryType === "detailed" ? "detailed" : "short";
+
+    if (editedTranscript && typeof editedTranscript === "string") {
+      video.transcript = editedTranscript;
+      video.summary = undefined; // Force regenerate summary with edited transcript
+    }
+
+    // If summaryType changed or user requested regeneration, reset summary
+    if (video.summaryType !== mode) {
+      video.summary = undefined;
+      video.summaryType = mode;
+    }
+
     if (!video.transcript) {
       return res.status(400).json({
         success: false,
-        message: "Transcript not found. Please transcribe audio first using /transcribe/:id endpoint",
-        processingStatus: video.processingStatus,
+        message: "Transcript missing. Run /transcribe/:id first",
       });
     }
 
-    // Check if already summarized
     if (video.summary) {
       return res.status(200).json({
         success: true,
-        message: "Video already summarized",
         summary: video.summary,
+        summaryType: video.summaryType,
         processingStatus: video.processingStatus,
       });
     }
 
-    const ai = getGenAI();
-    const model = ai.getGenerativeModel({
-      model: "gemini-2.0-flash-exp",
-    });
+    // Truncate transcript if excessively long (safeguard against TPM limits)
+    const maxChars = 24000; // ~6000 tokens max input
+    const safeTranscript = video.transcript.length > maxChars 
+      ? video.transcript.slice(0, maxChars) + "\n...[Transcript truncated due to length]" 
+      : video.transcript;
 
-    const prompt = `
-You are an expert video summarizer. Given the transcript below,
-create both a **short summary (2-3 sentences)** and a **detailed summary (5 bullet points)**.
+    const cleanAiSummary = (text: string): string => {
+      if (!text) return "";
+      return text
+        .replace(/^(Here is a summary of the transcript:|Here is the summary:|Here is a summary:|Here's a summary of the transcript:|Sure! Here is the summary:)\s*/i, "")
+        .trim();
+    };
+
+    const shortPrompt = `
+You are an expert AI Video Intelligence Assistant. Provide a CONCISE SHORT SUMMARY of the following transcript in crisp Markdown format.
+
+STRICT RULES:
+1. Do NOT include any conversational preamble or greeting (e.g. "Here is a summary...", "Sure!").
+2. Start directly with the section header: ### ⚡ Short Overview (2-3 crisp sentences maximum).
+3. Followed by section header: ### 🎯 Core Takeaways (3 concise bullet points).
 
 Transcript:
-${video.transcript}
-
-Format your response as:
-
-Short Summary:
-[summary here]
-
-Detailed Summary:
-1. ...
-2. ...
-3. ...
-4. ...
-5. ...
+${safeTranscript}
 `;
 
-    console.log("🧠 Sending transcript to Gemini for summarization...");
-    const result = await model.generateContent(prompt);
+    const detailedPrompt = `
+You are an expert AI Video Intelligence Assistant. Provide an IN-DEPTH DETAILED SUMMARY of the following transcript in rich Markdown format.
 
-    const summary = result.response?.text?.() || "No summary generated";
+STRICT RULES:
+1. Do NOT include any conversational preamble or greeting (e.g. "Here is a summary...", "Sure!").
+2. Start directly with section header: ### 📋 Executive Summary.
+3. Followed by section header: ### 🔍 In-Depth Analysis (5-7 comprehensive, detailed bullet points explaining main themes, evidence, and key technical concepts).
+4. End with section header: ### 💡 Key Actionable Takeaways.
 
-    // Save summary in MongoDB
+Transcript:
+${safeTranscript}
+`;
+
+    const prompt = mode === "detailed" ? detailedPrompt : shortPrompt;
+
+    sendProgress(id, "summarizing", 40, "Generating AI Summary with LLM...");
+
+    let summary: string | null = null;
+
+    try {
+      // Primary LLM Provider: Groq (llama-3.3-70b-versatile)
+      const chatCompletion = await groq.chat.completions.create({
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.3,
+        max_completion_tokens: 2048,
+        top_p: 1,
+        stream: false,
+      });
+
+      summary = chatCompletion.choices[0]?.message?.content || null;
+    } catch (primaryError: any) {
+      console.warn("⚠️ Groq LLM primary attempt failed:", primaryError.message || primaryError);
+
+      if (process.env.GOOGLE_API_KEY) {
+        const ai = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+        const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        summary = response.text();
+      } else {
+        throw primaryError;
+      }
+    }
+
+    if (summary) {
+      summary = cleanAiSummary(summary);
+    }
+
+    if (!summary) {
+      throw new Error("Failed to generate summary from both primary and fallback AI models.");
+    }
+
     video.summary = summary;
     video.processingStatus = "summarized";
     await video.save();
 
+    sendProgress(id, "summarized", 100, "Summary Completed Successfully");
+
     res.status(200).json({
       success: true,
-      message: "Summary generated successfully",
       summary,
       processingStatus: video.processingStatus,
     });
   } catch (err: any) {
-    console.error("❌ Summarization error:", err.message || err);
-    
-    // Update status to failed
+    console.error("Summarization error:", err.message || err);
+
     try {
       const video = await Video.findById(req.params.id);
       if (video) {
@@ -233,255 +222,58 @@ Detailed Summary:
       }
     } catch {}
 
-    res.status(500).json({
+    const isRateLimit = err.status === 429 || err.code === "rate_limit_exceeded" || err.message?.includes("rate_limit");
+    const statusCode = isRateLimit ? 429 : 500;
+    const clientMessage = isRateLimit 
+      ? "AI provider rate limit reached. Please wait a moment before requesting another summary."
+      : err.message || "Summarization failed";
+
+    res.status(statusCode).json({
       success: false,
-      message: err.message || "Failed to generate summary",
-      error: process.env.NODE_ENV === "development" ? err.stack : undefined,
+      message: clientMessage,
     });
   }
 };
 
-export const listAvailableModels = async (req: Request, res: Response) => {
-  res.status(200).json({
-    success: true,
-    models: ["gemini-2.0-flash-exp"],
-    message: "Available Gemini models for transcription and summarization",
-  });
+/**
+ * Endpoint to explicitly save user transcript edits before summarizing
+ */
+export const updateTranscript = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { transcript } = req.body;
+
+    if (!transcript || typeof transcript !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "Transcript content is required",
+      });
+    }
+
+    const video = await Video.findById(id);
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        message: "Video not found",
+      });
+    }
+
+    video.transcript = transcript;
+    video.summary = undefined; // Reset summary so new transcript can be summarized
+    if (video.processingStatus === "summarized") {
+      video.processingStatus = "transcribed";
+    }
+    await video.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Transcript updated successfully",
+      video,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to update transcript",
+    });
+  }
 };
-
-
-
-
-
-// import { Request, Response } from "express";
-// import fs from "fs";
-// import path from "path";
-// import { Video } from "../model/video.model";
-// import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// let genAI: GoogleGenerativeAI | null = null;
-
-// const getGenAI = (): GoogleGenerativeAI => {
-//   if (!genAI) {
-//     const googleApiKey = process.env.GOOGLE_API_KEY;
-    
-//     if (!googleApiKey) {
-//       throw new Error("GOOGLE_API_KEY is not set in environment variables");
-//     }
-    
-//     genAI = new GoogleGenerativeAI(googleApiKey);
-//     console.log("✅ GoogleGenerativeAI initialized");
-//   }
-  
-//   return genAI;
-// };
-
-// export const transcribeAudio = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params;
-
-//     // Find video in database
-//     const video = await Video.findById(id);
-    
-//     if (!video) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Video not found",
-//       });
-//     }
-
-//     // VALIDATION: Check if audio has been extracted
-//     if (!video.audioPath) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Audio not extracted. Please extract audio first using /extract-audio/:id endpoint",
-//         processingStatus: video.processingStatus,
-//       });
-//     }
-
-//     // Check if already transcribed
-//     if (video.transcript) {
-//       return res.status(200).json({
-//         success: true,
-//         message: "Video already transcribed",
-//         transcript: video.transcript,
-//         processingStatus: video.processingStatus,
-//       });
-//     }
-
-//     // Verify audio file exists
-//     const audioPath = path.resolve(video.audioPath);
-//     if (!fs.existsSync(audioPath)) {
-//       return res.status(404).json({ 
-//         success: false, 
-//         message: "Audio file not found on server" 
-//       });
-//     }
-
-//     // Check audio file size (should be under 20MB for Base64 approach)
-//     const stats = fs.statSync(audioPath);
-//     if (stats.size > 20 * 1024 * 1024) {
-//       return res.status(413).json({
-//         success: false,
-//         message: "Audio file too large for transcription (max 20MB)",
-//       });
-//     }
-
-//     console.log("📖 Reading audio file:", audioPath);
-//     const audioBuffer = fs.readFileSync(audioPath);
-//     const base64Audio = audioBuffer.toString("base64");
-
-//     const ai = getGenAI();
-//     const model = ai.getGenerativeModel({
-//       model: "gemini-2.0-flash-exp",
-//     });
-
-//     console.log("🚀 Sending to Gemini for transcription...");
-//     const result = await model.generateContent([
-//       {
-//         text: "Transcribe the following audio into clear and accurate text:",
-//       },
-//       {
-//         inlineData: {
-//           mimeType: "audio/wav",
-//           data: base64Audio,
-//         },
-//       },
-//     ]);
-
-//     const transcription = result.response.text();
-//     console.log("✅ Transcription completed");
-
-//     // Save transcript to MongoDB
-//     video.transcript = transcription;
-//     video.processingStatus = "transcribed";
-//     await video.save();
-
-//     res.status(200).json({
-//       success: true,
-//       message: "Transcription completed successfully",
-//       transcript: transcription,
-//       processingStatus: video.processingStatus,
-//     });
-//   } catch (err: any) {
-//     console.error("❌ Transcription error:", err.message || err);
-    
-//     // Update status to failed
-//     try {
-//       const video = await Video.findById(req.params.id);
-//       if (video) {
-//         video.processingStatus = "failed";
-//         await video.save();
-//       }
-//     } catch {}
-
-//     res.status(500).json({
-//       success: false,
-//       message: err.message || "Transcription failed",
-//       error: process.env.NODE_ENV === "development" ? err.stack : undefined,
-//     });
-//   }
-// };
-
-// export const summarizeTranscript = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params;
-
-//     // Find video & check transcript
-//     const video = await Video.findById(id);
-//     if (!video) {
-//       return res.status(404).json({ 
-//         success: false, 
-//         message: "Video not found" 
-//       });
-//     }
-
-//     // VALIDATION: Check if video has been transcribed
-//     if (!video.transcript) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Transcript not found. Please transcribe audio first using /transcribe/:id endpoint",
-//         processingStatus: video.processingStatus,
-//       });
-//     }
-
-//     // Check if already summarized
-//     if (video.summary) {
-//       return res.status(200).json({
-//         success: true,
-//         message: "Video already summarized",
-//         summary: video.summary,
-//         processingStatus: video.processingStatus,
-//       });
-//     }
-
-//     const ai = getGenAI();
-//     const model = ai.getGenerativeModel({
-//       model: "gemini-2.0-flash-exp",
-//     });
-
-//     const prompt = `
-// You are an expert video summarizer. Given the transcript below,
-// create both a **short summary (2-3 sentences)** and a **detailed summary (5 bullet points)**.
-
-// Transcript:
-// ${video.transcript}
-
-// Format your response as:
-
-// Short Summary:
-// [summary here]
-
-// Detailed Summary:
-// 1. ...
-// 2. ...
-// 3. ...
-// 4. ...
-// 5. ...
-// `;
-
-//     console.log("🧠 Sending transcript to Gemini for summarization...");
-//     const result = await model.generateContent(prompt);
-
-//     const summary = result.response?.text?.() || "No summary generated";
-
-//     // Save summary in MongoDB
-//     video.summary = summary;
-//     video.processingStatus = "summarized";
-//     await video.save();
-
-//     res.status(200).json({
-//       success: true,
-//       message: "Summary generated successfully",
-//       summary,
-//       processingStatus: video.processingStatus,
-//     });
-//   } catch (err: any) {
-//     console.error("❌ Summarization error:", err.message || err);
-    
-//     // Update status to failed
-//     try {
-//       const video = await Video.findById(req.params.id);
-//       if (video) {
-//         video.processingStatus = "failed";
-//         await video.save();
-//       }
-//     } catch {}
-
-//     res.status(500).json({
-//       success: false,
-//       message: err.message || "Failed to generate summary",
-//       error: process.env.NODE_ENV === "development" ? err.stack : undefined,
-//     });
-//   }
-// };
-
-// export const listAvailableModels = async (req: Request, res: Response) => {
-//   res.status(200).json({
-//     success: true,
-//     models: ["gemini-2.0-flash-exp"],
-//     message: "Available Gemini models for transcription and summarization",
-//   });
-// };
-
-

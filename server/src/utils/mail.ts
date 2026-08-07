@@ -42,10 +42,7 @@ const sendEmail = async (options: optionsType) => {
   try {
     await transporter.sendMail(mailOptions);
   } catch (error) {
-    console.log(
-      "Email service failed silently. Make sure you have provided your MAILTRAP credential in the .env file"
-    );
-    console.error("Error:", error);
+    console.error("Email service error:", error);
   }
 };
 interface ForgotPasswordType {

@@ -22,15 +22,10 @@
 
 // const port = process.env.PORT || 3000;
 
-// app.listen(port, () => {
-//   console.log(`Server is running at port ${port}`);
-// });
-
-import path from "path";
+import "dotenv/config";
 import app from "./app";
 import { connectDB } from "./db/intex";
 // import dotenv from "dotenv";
-import "dotenv/config";
 
 // dotenv.config({
 //   path: "./.env",
@@ -51,7 +46,6 @@ const startServer = async () => {
     await connectDB();
 
     app.listen(PORT, () => {
-      console.log(`The server is running at http://localhost:${PORT}`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);
