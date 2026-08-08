@@ -28,6 +28,26 @@ const fetchYouTubeTitleViaOembed = async (url: string): Promise<string> => {
   return "YouTube Video";
 };
 
+const fetchYouTubeTitleWithFallback = async (url: string, videoId: string | null): Promise<string> => {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (apiKey && videoId) {
+    try {
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`);
+      if (res.ok) {
+        const data: any = await res.json();
+        if (data.items && data.items.length > 0 && data.items[0].snippet?.title) {
+          console.log(`✅ Fetched official title via Google YouTube Data API v3: "${data.items[0].snippet.title}"`);
+          return data.items[0].snippet.title;
+        }
+      }
+    } catch (err: any) {
+      console.warn("⚠️ Google YouTube API title fetch warning, falling back to oEmbed:", err.message || err);
+    }
+  }
+
+  return await fetchYouTubeTitleViaOembed(url);
+};
+
 export const downloadYouTubeAudio = async (req: Request, res: Response) => {
   try {
     const { youtubeUrl, title, clientTranscript } = req.body;
@@ -53,7 +73,7 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
     // --- SOLUTION 1: Handle Client-Side (Browser) Extracted Transcript ---
     if (clientTranscript && typeof clientTranscript === "string" && clientTranscript.trim().length > 0) {
       console.log(`🚀 Received Client-Side Extracted Transcript for: ${youtubeUrl} (${clientTranscript.length} chars)`);
-      const videoTitle = title || (await fetchYouTubeTitleViaOembed(youtubeUrl));
+      const videoTitle = title || (await fetchYouTubeTitleWithFallback(youtubeUrl, videoId));
 
       const doc = await Video.create({
         title: videoTitle,
@@ -108,8 +128,8 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
         const lastChunk = transcriptItems[transcriptItems.length - 1];
         const estimatedDuration = lastChunk ? Math.round((lastChunk.offset + lastChunk.duration) / 1000) : 0;
 
-        // Fetch official title via non-blocked YouTube oEmbed API
-        const videoTitle = title || (await fetchYouTubeTitleViaOembed(youtubeUrl));
+        // Fetch official title via Google YouTube Data API v3 (or fallback to oEmbed)
+        const videoTitle = title || (await fetchYouTubeTitleWithFallback(youtubeUrl, videoId));
 
         // Save directly to MongoDB with "transcribed" status
         const doc = await Video.create({
