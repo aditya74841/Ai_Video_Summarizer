@@ -5,6 +5,7 @@ import axios from "axios";
 import toast from "react-hot-toast";
 import { useRouter, useSearchParams } from "next/navigation";
 import { saveSummary, cleanupStaleSummaries, CachedSummary } from "../utils/indexedDB";
+import { fetchClientYouTubeData } from "../utils/clientYoutube";
 
 export type ProcessingStep =
   | "upload"
@@ -283,9 +284,25 @@ export function useVideoPipeline() {
 
     setLoading(true);
 
+    // Solution 1: Try client-side (browser) caption extraction on real user IP
+    let clientData: { transcript: string; title: string } | null = null;
+    try {
+      toast.loading("🌐 Extracting captions in browser...", { id: "yt-client" });
+      clientData = await fetchClientYouTubeData(urlToProcess);
+      if (clientData?.transcript) {
+        toast.success("✅ Captions extracted client-side!", { id: "yt-client" });
+      } else {
+        toast.dismiss("yt-client");
+      }
+    } catch {
+      toast.dismiss("yt-client");
+    }
+
     try {
       const res = await axios.post(`${API_URL}/youtube/download`, {
         youtubeUrl: urlToProcess,
+        clientTranscript: clientData?.transcript,
+        title: clientData?.title,
       });
       toast.success("YouTube URL accepted!");
       setVideoData(res.data.video);
