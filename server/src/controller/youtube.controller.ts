@@ -9,6 +9,25 @@ import { sendProgress } from "../utils/progress.util";
 
 const ytdlp = new YtDlp();
 
+const extractYouTubeVideoId = (url: string): string | null => {
+  if (!url) return null;
+  const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([^"&?\/\s]{11})/);
+  return match ? match[1] : null;
+};
+
+const fetchYouTubeTitleViaOembed = async (url: string): Promise<string> => {
+  try {
+    const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+    if (res.ok) {
+      const data: any = await res.json();
+      if (data && data.title) return data.title;
+    }
+  } catch (err: any) {
+    console.warn("⚠️ oEmbed title fetch failed:", err.message || err);
+  }
+  return "YouTube Video";
+};
+
 export const downloadYouTubeAudio = async (req: Request, res: Response) => {
   try {
     const { youtubeUrl, title } = req.body;
@@ -29,10 +48,21 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
       });
     }
 
+    const videoId = extractYouTubeVideoId(youtubeUrl);
+
     // --- METHOD 1: Try Instant YouTube Caption / Subtitle Transcript API first ---
     try {
-      console.log(`🌐 Attempting direct YouTube Caption extraction for: ${youtubeUrl}`);
-      const transcriptItems = await YoutubeTranscript.fetchTranscript(youtubeUrl);
+      console.log(`🌐 Attempting direct YouTube Caption extraction for: ${youtubeUrl} (Video ID: ${videoId})`);
+      
+      let transcriptItems: any[] = [];
+      try {
+        if (videoId) {
+          transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+        }
+      } catch (idErr) {
+        console.warn("⚠️ YoutubeTranscript failed with videoId, trying full URL...", idErr);
+        transcriptItems = await YoutubeTranscript.fetchTranscript(youtubeUrl);
+      }
 
       if (transcriptItems && transcriptItems.length > 0) {
         // Reconstruct complete transcript string across full video
@@ -46,18 +76,8 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
         const lastChunk = transcriptItems[transcriptItems.length - 1];
         const estimatedDuration = lastChunk ? Math.round((lastChunk.offset + lastChunk.duration) / 1000) : 0;
 
-        // Try getting official title via yt-dlp info metadata if possible, fallback gracefully
-        let videoTitle = title || "YouTube Video";
-        try {
-          const videoInfo: any = await ytdlp.getInfoAsync(youtubeUrl, {
-            additionalOptions: ["--no-warnings"],
-          } as any);
-          if (videoInfo && videoInfo.title) {
-            videoTitle = videoInfo.title;
-          }
-        } catch {
-          // If title fetch fails, continue with fallback title
-        }
+        // Fetch official title via non-blocked YouTube oEmbed API
+        const videoTitle = title || (await fetchYouTubeTitleViaOembed(youtubeUrl));
 
         // Save directly to MongoDB with "transcribed" status
         const doc = await Video.create({
