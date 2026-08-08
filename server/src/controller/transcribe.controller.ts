@@ -43,18 +43,36 @@ export const transcribeAudio = async (req: Request, res: Response) => {
     // Save to DB
     video.transcript = transcription.text;
     video.processingStatus = "transcribed";
+    
+    // Cleanup: Delete audio file from server disk to reduce load & save storage space
+    if (video.audioPath && fs.existsSync(video.audioPath)) {
+      try {
+        fs.unlinkSync(video.audioPath);
+        console.log(`🗑️ Successfully deleted audio file from server: ${video.audioPath}`);
+      } catch (unlinkErr) {
+        console.warn(`⚠️ Failed to delete audio file: ${unlinkErr}`);
+      }
+    }
+
+    // Cleanup: Delete original video file if it still exists on disk
+    if (video.path && fs.existsSync(video.path) && !video.youtubeUrl) {
+      try {
+        fs.unlinkSync(video.path);
+        console.log(`🗑️ Successfully deleted video file from server: ${video.path}`);
+      } catch (unlinkErr) {
+        console.warn(`⚠️ Failed to delete video file: ${unlinkErr}`);
+      }
+    }
+
+    video.audioPath = undefined;
+    video.audioUrl = undefined;
     await video.save();
 
     sendProgress(id, "transcribed", 100, "Transcription Completed");
 
-    // Cleanup: Delete local audio file
-    if (fs.existsSync(video.audioPath)) {
-      fs.unlinkSync(video.audioPath);
-    }
-
     res.status(200).json({
       success: true,
-      message: "Transcription complete",
+      message: "Transcription complete and audio file cleaned up from server",
       transcript: transcription,
     });
   } catch (err: any) {

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Video } from "../model/video.model";
 import { exec } from "child_process";
 import util from "util";
+import fs from "fs";
 
 const execPromise = util.promisify(exec);
 
@@ -101,28 +102,58 @@ export const getVideoById = async (req: Request, res: Response) => {
   }
 };
 
-// import { Request, Response } from "express";
-// import { Video } from "../model/video.model";
+export const deleteVideo = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
 
-// export const uploadVideo = async (req: Request, res: Response) => {
-//   if (!req.file) {
-//     return res
-//       .status(400)
-//       .json({ success: false, message: "No video file uploaded" });
-//   }
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid Video ID is required" });
+    }
 
-//   const title = (req.body?.title as string) || req.file.originalname;
+    const video = await Video.findById(id);
 
-//   const doc = await Video.create({
-//     title,
-//     path: req.file.path,
-//     size: req.file.size,
-//     mimetype: req.file.mimetype,
-//   });
+    if (video) {
+      // 1. Delete audio file from disk if present
+      if (video.audioPath && fs.existsSync(video.audioPath)) {
+        try {
+          fs.unlinkSync(video.audioPath);
+          console.log(`🗑️ Reset cleanup: Deleted audio file ${video.audioPath}`);
+        } catch (err) {
+          console.warn(`⚠️ Error deleting audio file on reset: ${err}`);
+        }
+      }
 
-//   return res.status(201).json({
-//     success: true,
-//     message: "Video uploaded and saved",
-//     video: doc,
-//   });
-// };
+      // 2. Delete original video file from disk if present (excluding YouTube URLs)
+      if (video.path && fs.existsSync(video.path) && !video.youtubeUrl) {
+        try {
+          fs.unlinkSync(video.path);
+          console.log(`🗑️ Reset cleanup: Deleted video file ${video.path}`);
+        } catch (err) {
+          console.warn(`⚠️ Error deleting video file on reset: ${err}`);
+        }
+      }
+
+      // If no summary exists yet, delete document from DB as well to keep DB clean
+      if (!video.summary) {
+        await Video.findByIdAndDelete(id);
+      } else {
+        // If summary exists, clear file paths
+        video.audioPath = undefined;
+        video.audioUrl = undefined;
+        await video.save();
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Server files cleaned up successfully",
+    });
+  } catch (error) {
+    console.error("Delete video error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to delete video files" });
+  }
+};

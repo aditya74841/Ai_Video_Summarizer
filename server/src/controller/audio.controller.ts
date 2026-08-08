@@ -95,8 +95,16 @@ export const extractAudio = async (req: Request, res: Response) => {
       throw new Error("Audio file was not created successfully");
     }
 
-    // Update video document
+    // Build the public-facing audio URL so the client can stream it
+    // The server serves /uploads as static files (see app.ts)
+    const protocol = req.protocol;
+    const host = req.get("host") || "localhost:8080";
+    const relativeAudioPath = `audio/${id}.mp3`;
+    const audioUrl = `${protocol}://${host}/uploads/${relativeAudioPath}`;
+
+    // Update video document — save BOTH audioPath (local) and audioUrl (HTTP)
     video.audioPath = audioOutputPath;
+    video.audioUrl = audioUrl;
     video.processingStatus = "audio_extracted";
     await video.save();
 

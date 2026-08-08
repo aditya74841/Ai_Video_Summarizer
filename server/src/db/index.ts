@@ -1,4 +1,4 @@
-import mongoose, { Connection } from "mongoose";
+import mongoose from "mongoose";
 
 export let dbInstance: typeof mongoose | null = null;
 
@@ -8,8 +8,9 @@ const connectDB = async (): Promise<void> => {
 
     const connectionInstance = await mongoose.connect(MONGODB_URI);
     dbInstance = connectionInstance;
+    console.log(`✅ MongoDB Connected: ${connectionInstance.connection.host}`);
   } catch (error) {
-    console.error(error);
+    console.error("❌ MongoDB connection error:", error);
     process.exit(1);
   }
 };

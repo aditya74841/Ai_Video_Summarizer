@@ -43,11 +43,17 @@ export function useVideoPipeline() {
   const [summaryType, setSummaryType] = useState<"short" | "detailed">("short");
   const [refreshCacheTrigger, setRefreshCacheTrigger] = useState<number>(0);
 
+  // Server health state for Render Free Tier cold-start monitoring
+  const [serverReady, setServerReady] = useState<boolean>(false);
+  const [isWakingUpServer, setIsWakingUpServer] = useState<boolean>(false);
+
   // Real-time SSE State
   const [sseMessage, setSseMessage] = useState<string>("");
   const [sseProgress, setSseProgress] = useState<number>(0);
 
-  const API_URL = "http://localhost:8080/api/videos";
+  const rawServerUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+  const SERVER_URL = rawServerUrl.replace(/\/api\/videos\/?$/, "").replace(/\/+$/, "");
+  const API_URL = `${SERVER_URL}/api/videos`;
 
   const steps = [
     { id: "upload", label: "Upload", icon: "📤", step: 1 },
@@ -55,6 +61,55 @@ export function useVideoPipeline() {
     { id: "transcribe", label: "Transcribe", icon: "📝", step: 3 },
     { id: "summarize", label: "Summarize", icon: "🧠", step: 4 },
   ];
+
+  // Ping backend on app startup to wake up Render free tier instances
+  useEffect(() => {
+    let isMounted = true;
+    let wakeToastId: string | null = null;
+
+    const checkServerHealth = async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+        const res = await fetch(`${SERVER_URL}/health-check`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.ok && isMounted) {
+          setServerReady(true);
+          setIsWakingUpServer(false);
+          return;
+        }
+      } catch {}
+
+      if (!isMounted) return;
+
+      setIsWakingUpServer(true);
+      wakeToastId = toast.loading("⚡ Connecting to server (Render free tier cold start ~30s)...", {
+        id: "server-wakeup",
+      });
+
+      const pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`${SERVER_URL}/health-check`);
+          if (res.ok) {
+            clearInterval(pollInterval);
+            if (isMounted) {
+              setServerReady(true);
+              setIsWakingUpServer(false);
+              toast.success("🚀 Backend server ready!", { id: "server-wakeup" });
+            }
+          }
+        } catch {}
+      }, 3000);
+    };
+
+    checkServerHealth();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [SERVER_URL]);
 
   // Silent 7-day auto-cleanup background task on app startup
   useEffect(() => {
@@ -236,7 +291,14 @@ export function useVideoPipeline() {
       setVideoData(res.data.video);
       router.push(`?id=${res.data.video._id}`);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "URL processing failed");
+      const errMsg = err.response?.data?.message || "URL processing failed";
+      toast.error(errMsg, { duration: 6000 });
+
+      // Suggest 1-Click Demo Video as a quick reliable alternative!
+      toast("💡 Tip: Try clicking '1-Click Demo Video' to test the full processing pipeline instantly!", {
+        icon: "🎬",
+        duration: 8000,
+      });
     } finally {
       setLoading(false);
     }
@@ -317,7 +379,14 @@ export function useVideoPipeline() {
     toast.success("Downloaded Summary (.md)");
   };
 
-  const resetAll = () => {
+  const resetAll = async () => {
+    if (videoData?._id) {
+      try {
+        await axios.delete(`${API_URL}/reset/${videoData._id}`);
+      } catch (err) {
+        console.warn("⚠️ Server cleanup warning on reset:", err);
+      }
+    }
     setFile(null);
     setVideoData(null);
     setCurrentStep("upload");
@@ -340,6 +409,8 @@ export function useVideoPipeline() {
     isURLMode,
     summaryType,
     refreshCacheTrigger,
+    serverReady,
+    isWakingUpServer,
     sseMessage,
     sseProgress,
     steps,

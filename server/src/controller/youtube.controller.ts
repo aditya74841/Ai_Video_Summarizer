@@ -29,19 +29,39 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
     }
 
     // Get video info with player client workaround
-    const videoInfo = await ytdlp.getInfoAsync(youtubeUrl, {
-      additionalOptions: [
-        "--extractor-args",
-        "youtube:player_client=android,web",
-        "--no-warnings",
-      ],
-    } as any);
+    let videoInfo: any;
+    try {
+      videoInfo = await ytdlp.getInfoAsync(youtubeUrl, {
+        additionalOptions: [
+          "--extractor-args",
+          "youtube:player_client=android,web",
+          "--no-warnings",
+        ],
+      } as any);
+    } catch (infoError: any) {
+      console.warn("⚠️ YouTube info extraction failed:", infoError.message || infoError);
+      
+      const errorStr = (infoError.message || "").toLowerCase();
+      if (
+        errorStr.includes("sign in to confirm") ||
+        errorStr.includes("bot") ||
+        errorStr.includes("429") ||
+        errorStr.includes("too many requests") ||
+        errorStr.includes("blocked")
+      ) {
+        return res.status(429).json({
+          success: false,
+          message: "YouTube security automated rate-limited cloud server IP. Please use the 1-Click Demo Video or upload a local MP4 file!",
+        });
+      }
+      
+      throw infoError;
+    }
 
     if (videoInfo._type === "playlist") {
       return res.status(400).json({
         success: false,
-        message:
-          "Playlists are not supported. Please provide a single video URL",
+        message: "Playlists are not supported. Please provide a single video URL",
       });
     }
 
@@ -65,8 +85,8 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
     // Create video document first
     const doc = await Video.create({
       title: videoTitle,
-      path: youtubeUrl, // Store YouTube URL instead of file path
-      size: 0, // We don't have size yet
+      path: youtubeUrl,
+      size: 0,
       mimetype: "audio/mp3",
       duration,
       processingStatus: "audio_extracted",
@@ -74,15 +94,13 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
     });
 
     const audioOutputPath = path.join(audioDir, `${doc._id}.mp3`);
-
     const ffmpegPath = require("ffmpeg-static");
 
     // Download audio only with proper options & YouTube player client override
-    // And use FFmpeg to convert to 16kHz mono MP3
     await ytdlp.downloadAsync(youtubeUrl, {
       format: {
         filter: "audioonly",
-        quality: 9, // 0-10, where 0 is best quality
+        quality: 9,
         type: "mp3",
       },
       output: audioOutputPath,
@@ -117,17 +135,13 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
       throw new Error("Audio file was not created successfully");
     }
 
-    // Get file size
     const stats = fs.statSync(audioOutputPath);
-
-    const baseUrl =
-      process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 8000}`;
     const relativeAudioPath = `uploads/audio/${doc._id}.mp3`;
     const audioUrl = `${baseUrl}/${relativeAudioPath}`;
 
     const metadata = await getAudioMetadata(audioOutputPath);
 
-    // Update video document
     doc.audioPath = audioOutputPath;
     doc.size = stats.size;
     doc.audioUrl = audioUrl;
@@ -164,7 +178,6 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
         video.processingStatus = "failed";
         await video.save();
 
-        // Delete audio file if it exists
         if (video.audioPath && fs.existsSync(video.audioPath)) {
           fs.unlinkSync(video.audioPath);
         }
@@ -173,9 +186,21 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
       console.error("Cleanup error:", cleanupError);
     }
 
-    return res.status(500).json({
+    const errorStr = (error.message || "").toLowerCase();
+    const isRateLimited =
+      errorStr.includes("sign in to confirm") ||
+      errorStr.includes("bot") ||
+      errorStr.includes("429") ||
+      errorStr.includes("too many requests") ||
+      errorStr.includes("blocked");
+
+    const message = isRateLimited
+      ? "YouTube automated rate-limited cloud server IP. Please use the 1-Click Demo Video or upload a local MP4 file!"
+      : error.message || "Failed to download audio from YouTube";
+
+    return res.status(isRateLimited ? 429 : 500).json({
       success: false,
-      message: error.message || "Failed to download audio from YouTube",
+      message,
       error: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }

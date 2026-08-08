@@ -12,56 +12,130 @@ interface ProcessingStepsProps {
   steps: Step[];
 }
 
-export default function ProcessingSteps({
-  currentStep,
-  steps,
-}: ProcessingStepsProps) {
-  const getStepIndex = (step: string) =>
-    steps.findIndex((s) => s.id === step);
-
+export default function ProcessingSteps({ currentStep, steps }: ProcessingStepsProps) {
+  const getStepIndex = (step: string) => steps.findIndex((s) => s.id === step);
   const currentStepIndex = getStepIndex(currentStep);
 
   return (
-    <div className="mt-8 flex justify-center items-center gap-2 md:gap-4 overflow-x-auto pb-4">
-      {steps.map((step, index) => (
-        <div key={step.id} className="flex items-center shrink-0">
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        gap: "0",
+        marginTop: "32px",
+        overflowX: "auto",
+        paddingBottom: "8px",
+      }}
+    >
+      {steps.map((step, index) => {
+        const isDone = index < currentStepIndex;
+        const isActive = index === currentStepIndex;
+        const isPending = index > currentStepIndex;
+
+        return (
           <div
-            className={`flex flex-col items-center transition-all duration-500 ${
-              index <= currentStepIndex
-                ? "opacity-100 scale-100"
-                : "opacity-40 scale-95"
-            }`}
+            key={step.id}
+            style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
           >
+            {/* Step node */}
             <div
-              className={`w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-2xl transition-all duration-500 ${
-                index < currentStepIndex
-                  ? "bg-linear-to-r from-green-400 to-emerald-500 shadow-lg shadow-green-500/50"
-                  : index === currentStepIndex
-                  ? "bg-linear-to-r from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/50 animate-pulse"
-                  : "bg-gray-200"
-              }`}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "8px",
+                opacity: isPending ? 0.35 : 1,
+                transition: "opacity 0.4s ease, transform 0.4s ease",
+                transform: isPending ? "scale(0.93)" : "scale(1)",
+              }}
             >
-              {index < currentStepIndex ? "✓" : step.icon}
+              {/* Circle */}
+              <div
+                style={{
+                  width: "44px",
+                  height: "44px",
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "18px",
+                  transition: "all 0.4s ease",
+                  background: isDone
+                    ? "linear-gradient(135deg, #10b981, #059669)"
+                    : isActive
+                    ? "linear-gradient(135deg, #8b5cf6, #6d28d9)"
+                    : "rgba(255,255,255,0.06)",
+                  border: isActive
+                    ? "2px solid rgba(139,92,246,0.5)"
+                    : "2px solid transparent",
+                  boxShadow: isDone
+                    ? "0 4px 16px rgba(16,185,129,0.3)"
+                    : isActive
+                    ? "0 4px 20px rgba(139,92,246,0.5)"
+                    : "none",
+                  animation: isActive ? "progress-glow 2s ease-in-out infinite" : "none",
+                }}
+              >
+                {isDone ? (
+                  <svg
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="white"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2.5}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                ) : (
+                  step.icon
+                )}
+              </div>
+
+              {/* Label */}
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: isActive ? 700 : 500,
+                  color: isDone
+                    ? "var(--success)"
+                    : isActive
+                    ? "var(--accent-light)"
+                    : "var(--text-muted)",
+                  whiteSpace: "nowrap",
+                  letterSpacing: "0.01em",
+                }}
+              >
+                {step.label}
+              </span>
             </div>
-            <span
-              className={`text-xs md:text-sm mt-2 font-semibold whitespace-nowrap ${
-                index <= currentStepIndex ? "text-gray-700" : "text-gray-400"
-              }`}
-            >
-              {step.label}
-            </span>
+
+            {/* Connector */}
+            {index < steps.length - 1 && (
+              <div
+                style={{
+                  width: "clamp(24px, 4vw, 60px)",
+                  height: "2px",
+                  marginBottom: "20px",
+                  marginLeft: "8px",
+                  marginRight: "8px",
+                  borderRadius: "99px",
+                  background: isDone
+                    ? "linear-gradient(90deg, #10b981, #059669)"
+                    : "rgba(255,255,255,0.06)",
+                  transition: "background 0.5s ease",
+                  flexShrink: 0,
+                }}
+              />
+            )}
           </div>
-          {index < steps.length - 1 && (
-            <div
-              className={`w-8 md:w-16 h-1 mx-2 rounded-full transition-all duration-500 ${
-                index < currentStepIndex
-                  ? "bg-linear-to-r from-green-400 to-emerald-500"
-                  : "bg-gray-200"
-              }`}
-            ></div>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { CachedSummary, getAllSummaries, deleteSummary } from "../utils/indexedDB";
 import toast from "react-hot-toast";
 import ReactMarkdown from "react-markdown";
@@ -36,7 +36,7 @@ export default function RecentSummaries({ onSelectSummary, refreshTrigger }: Rec
   const handleDelete = async (e: React.MouseEvent, videoId: string) => {
     e.stopPropagation();
     await deleteSummary(videoId);
-    toast.success("Summary removed from local cache");
+    toast.success("Removed from cache");
     await loadSummaries();
   };
 
@@ -52,29 +52,79 @@ export default function RecentSummaries({ onSelectSummary, refreshTrigger }: Rec
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-500 text-sm">
-        Loading recent summaries...
+      <div
+        className="card"
+        style={{
+          padding: "20px",
+          textAlign: "center",
+          color: "var(--text-muted)",
+          fontSize: "13px",
+        }}
+      >
+        Loading cached summaries…
       </div>
     );
   }
 
-  if (summaries.length === 0) {
-    return null;
-  }
+  if (summaries.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4">
-      <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xl">📚</span>
-          <h2 className="text-lg font-bold text-gray-900">Recent Summaries (Offline Cached)</h2>
+    <div className="card" style={{ padding: "24px" }}>
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "20px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "8px",
+              background: "var(--accent-dim)",
+              border: "1px solid var(--border-accent)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "16px",
+            }}
+          >
+            📚
+          </div>
+          <div>
+            <h2
+              style={{
+                fontSize: "15px",
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              Recent Summaries
+            </h2>
+            <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              Offline cached · Auto-clean after 7 days
+            </p>
+          </div>
         </div>
-        <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium border border-indigo-100">
-          {summaries.length} Saved (7-Day Auto Cleanup)
-        </span>
+        <span className="badge badge-neutral">{summaries.length} saved</span>
       </div>
 
-      <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+      {/* Items */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          maxHeight: "420px",
+          overflowY: "auto",
+          paddingRight: "4px",
+        }}
+      >
         {summaries.map((item) => {
           const isExpanded = expandedId === item.videoId;
           const cleanSummary = sanitizeContent(item.summary);
@@ -82,70 +132,179 @@ export default function RecentSummaries({ onSelectSummary, refreshTrigger }: Rec
           return (
             <div
               key={item.videoId}
-              className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition-colors bg-gray-50/50 space-y-2"
+              style={{
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--border)",
+                background: "var(--bg-elevated)",
+                overflow: "hidden",
+                transition: "border-color 0.2s ease",
+              }}
+              onMouseEnter={(e) =>
+                ((e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.1)")
+              }
+              onMouseLeave={(e) =>
+                ((e.currentTarget as HTMLDivElement).style.borderColor = "var(--border)")
+              }
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-sm text-gray-900 line-clamp-1">{item.title}</h3>
-                    {item.youtubeUrl ? (
-                      <span className="text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded font-medium border border-red-100">
-                        YouTube
+              {/* Item header */}
+              <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        flexWrap: "wrap",
+                        marginBottom: "3px",
+                      }}
+                    >
+                      <h3
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: "var(--text-primary)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: "260px",
+                        }}
+                      >
+                        {item.title}
+                      </h3>
+                      <span
+                        className={item.youtubeUrl ? "badge badge-danger" : "badge badge-neutral"}
+                      >
+                        {item.youtubeUrl ? "YouTube" : "File"}
                       </span>
-                    ) : (
-                      <span className="text-[10px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-medium">
-                        File Upload
-                      </span>
-                    )}
+                    </div>
+                    <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      {formatDate(item.createdAt)}
+                    </p>
                   </div>
-                  <p className="text-xs text-gray-400">Saved: {formatDate(item.createdAt)}</p>
+
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                    <button
+                      onClick={() => onSelectSummary(item)}
+                      className="btn btn-primary"
+                      style={{ padding: "6px 14px", fontSize: "12px" }}
+                    >
+                      View →
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(e, item.videoId)}
+                      className="btn btn-ghost"
+                      title="Delete from cache"
+                      style={{ padding: "6px", color: "var(--danger)" }}
+                    >
+                      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={() => onSelectSummary(item)}
-                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-md transition-colors"
-                  >
-                    View ➔
-                  </button>
-                  <button
-                    onClick={(e) => handleDelete(e, item.videoId)}
-                    className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded"
-                    title="Delete from cache"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
+                {/* Summary snippet */}
+                <p
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--text-muted)",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {cleanSummary}
+                </p>
+
+                {/* Expand toggle */}
+                <button
+                  onClick={() => setExpandedId(isExpanded ? null : item.videoId)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "var(--accent-light)",
+                    padding: 0,
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  {isExpanded ? "Collapse ▲" : "Show full summary ▼"}
+                </button>
               </div>
 
-              {/* Quick Summary Snippet */}
-              <div className="text-xs text-gray-600 line-clamp-2 leading-relaxed bg-white p-2.5 rounded border border-gray-100 font-sans">
-                {cleanSummary}
-              </div>
-
-              <button
-                onClick={() => setExpandedId(isExpanded ? null : item.videoId)}
-                className="text-[11px] text-indigo-600 font-medium hover:underline flex items-center gap-1"
-              >
-                {isExpanded ? "Collapse Details ▲" : "Expand Full Summary & Transcript ▼"}
-              </button>
-
+              {/* Expanded content */}
               {isExpanded && (
-                <div className="mt-3 pt-3 border-t border-gray-200 space-y-3 bg-white p-3 rounded-lg border">
+                <div
+                  style={{
+                    borderTop: "1px solid var(--border)",
+                    padding: "16px",
+                    background: "var(--bg-card)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                  }}
+                >
                   <div>
-                    <h4 className="text-xs font-bold text-gray-900 mb-1">Full Summary</h4>
-                    <div className="text-xs text-gray-700 leading-relaxed font-sans prose prose-xs max-w-none">
+                    <p
+                      style={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        color: "var(--text-muted)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.1em",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      Full Summary
+                    </p>
+                    <div className="dark-prose" style={{ fontSize: "13px" }}>
                       <ReactMarkdown
                         components={{
-                          h1: ({ children }) => <h4 className="font-bold text-xs text-gray-900 mt-2 mb-1">{children}</h4>,
-                          h2: ({ children }) => <h4 className="font-bold text-xs text-gray-900 mt-2 mb-1">{children}</h4>,
-                          h3: ({ children }) => <h4 className="font-bold text-xs text-indigo-900 mt-2 mb-1 uppercase">{children}</h4>,
-                          strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-                          ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-1 pl-1">{children}</ul>,
-                          li: ({ children }) => <li className="text-gray-700">{children}</li>,
-                          p: ({ children }) => <p className="text-gray-700 mb-1.5">{children}</p>,
+                          h1: ({ children }) => (
+                            <h4 style={{ fontWeight: 700, fontSize: "13px", color: "var(--text-primary)", marginTop: "12px", marginBottom: "4px" }}>{children}</h4>
+                          ),
+                          h2: ({ children }) => (
+                            <h4 style={{ fontWeight: 700, fontSize: "13px", color: "var(--text-primary)", marginTop: "12px", marginBottom: "4px" }}>{children}</h4>
+                          ),
+                          h3: ({ children }) => (
+                            <h4 style={{ fontWeight: 700, fontSize: "11px", color: "var(--accent-light)", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "12px", marginBottom: "4px" }}>{children}</h4>
+                          ),
+                          strong: ({ children }) => (
+                            <strong style={{ fontWeight: 600, color: "var(--text-primary)" }}>{children}</strong>
+                          ),
+                          ul: ({ children }) => (
+                            <ul style={{ listStyle: "none", padding: 0, margin: "8px 0", display: "flex", flexDirection: "column", gap: "6px" }}>{children}</ul>
+                          ),
+                          li: ({ children }) => (
+                            <li style={{ display: "flex", gap: "8px", color: "var(--text-secondary)" }}>
+                              <span style={{ color: "var(--accent)", fontWeight: 700, flexShrink: 0 }}>→</span>
+                              <span>{children}</span>
+                            </li>
+                          ),
+                          p: ({ children }) => (
+                            <p style={{ color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: "8px" }}>{children}</p>
+                          ),
                         }}
                       >
                         {cleanSummary}
@@ -155,10 +314,35 @@ export default function RecentSummaries({ onSelectSummary, refreshTrigger }: Rec
 
                   {item.transcript && (
                     <div>
-                      <h4 className="text-xs font-bold text-gray-900 mb-1">Transcript</h4>
-                      <p className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto bg-gray-50 p-2 rounded">
-                        {item.transcript}
+                      <p
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          color: "var(--text-muted)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.1em",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        Transcript
                       </p>
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: "var(--text-muted)",
+                          whiteSpace: "pre-wrap",
+                          lineHeight: 1.7,
+                          maxHeight: "140px",
+                          overflowY: "auto",
+                          background: "var(--bg-elevated)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-sm)",
+                          padding: "12px",
+                          fontFamily: "var(--font-mono)",
+                        }}
+                      >
+                        {item.transcript}
+                      </div>
                     </div>
                   )}
                 </div>

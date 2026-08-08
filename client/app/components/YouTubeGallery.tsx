@@ -13,26 +13,26 @@ export interface SampleVideo {
 const SAMPLE_YOUTUBE_VIDEOS: SampleVideo[] = [
   {
     id: "ZXiruGOCn9s",
-    title: "What is Transformers ?",
-    category: "AI & Machine Learning",
+    title: "What is Transformers?",
+    category: "AI & ML",
     url: "https://www.youtube.com/watch?v=ZXiruGOCn9s",
   },
   {
     id: "rJ1Qao09CFI",
     title: "What is an AI",
-    category: "Web Development",
+    category: "Technology",
     url: "https://www.youtube.com/watch?v=rJ1Qao09CFI",
   },
   {
     id: "jNQXAC9IVRw",
-    title: "Me at the zoo (First YouTube Video)",
+    title: "Me at the zoo",
     category: "Tech History",
     url: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
   },
   {
     id: "dQw4w9WgXcQ",
-    title: "Never Gonna Give You Up - Official Video",
-    category: "Entertainment Test",
+    title: "Never Gonna Give You Up",
+    category: "Entertainment",
     url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
   },
 ];
@@ -59,86 +59,186 @@ export default function YouTubeGallery({
   const selectedYouTubeEmbedId = getYouTubeEmbedId(videoURL);
 
   return (
-    <div className="space-y-6">
-      {/* YouTube Link Input Bar */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          Paste YouTube URL (Max 12 minutes)
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      {/* URL Input */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <label
+          style={{
+            fontSize: "12px",
+            fontWeight: 600,
+            color: "var(--text-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+          }}
+        >
+          YouTube URL · Max 12 minutes
         </label>
-        <div className="flex gap-2">
+        <div style={{ display: "flex", gap: "10px" }}>
           <input
             type="text"
             placeholder="https://www.youtube.com/watch?v=..."
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            className="input"
             value={videoURL}
             onChange={(e) => onURLChange(e.target.value)}
+            id="youtube-url-input"
+            style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}
           />
           <button
             onClick={() => onSubmitURL()}
             disabled={loading || !videoURL}
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm rounded-lg transition-colors disabled:opacity-50"
+            className="btn btn-primary"
+            id="youtube-submit-btn"
+            style={{ flexShrink: 0, padding: "12px 20px" }}
           >
-            {loading ? "Processing..." : "Summarize Video"}
+            {loading ? "Processing…" : "Analyze"}
           </button>
         </div>
       </div>
 
-      {/* Instant Embedded Player Preview */}
+      {/* Embedded Preview */}
       {selectedYouTubeEmbedId && (
-        <div className="border border-indigo-200 rounded-xl overflow-hidden shadow-sm bg-black space-y-0">
-          <div className="bg-indigo-900 text-white text-xs px-4 py-2 font-medium flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
-              Direct YouTube Player Preview
+        <div
+          style={{
+            borderRadius: "var(--radius-lg)",
+            overflow: "hidden",
+            border: "1px solid var(--border-accent)",
+            boxShadow: "var(--shadow-accent)",
+          }}
+        >
+          <div
+            style={{
+              background: "rgba(139,92,246,0.08)",
+              padding: "10px 16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              borderBottom: "1px solid var(--border-accent)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  background: "#ef4444",
+                  boxShadow: "0 0 8px #ef4444",
+                  animation: "pulse-ring 2s ease-out infinite",
+                }}
+              />
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent-light)" }}>
+                Live Preview
+              </span>
+            </div>
+            <span
+              style={{
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {selectedYouTubeEmbedId}
             </span>
-            <span className="text-indigo-200">ID: {selectedYouTubeEmbedId}</span>
           </div>
-          <div className="aspect-video w-full">
+          <div style={{ aspectRatio: "16/9", width: "100%" }}>
             <iframe
-              className="w-full h-full border-0"
+              style={{ width: "100%", height: "100%", border: "none", display: "block" }}
               src={`https://www.youtube.com/embed/${selectedYouTubeEmbedId}`}
               title="Selected YouTube Video"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
-            ></iframe>
+            />
           </div>
         </div>
       )}
 
-      {/* Featured Genuine Video Picker Grid */}
-      <div className="space-y-3 pt-2">
-        <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
-          <span>🎬</span> Select a Sample YouTube Video (Max 12 Mins)
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {SAMPLE_YOUTUBE_VIDEOS.map((sample) => (
-            <div
-              key={sample.id}
-              onClick={() => {
-                onURLChange(sample.url);
-                toast.success(`Selected: ${sample.title}`);
-              }}
-              className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
-                selectedYouTubeEmbedId === sample.id
-                  ? "border-indigo-600 bg-indigo-50/50 shadow-md ring-2 ring-indigo-500/20"
-                  : "border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm"
-              }`}
-            >
-              <div className="space-y-2">
-                <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+      {/* Sample Videos Grid */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <p
+          style={{
+            fontSize: "11px",
+            fontWeight: 700,
+            color: "var(--text-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+          }}
+        >
+          Sample Videos
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+            gap: "10px",
+          }}
+        >
+          {SAMPLE_YOUTUBE_VIDEOS.map((sample) => {
+            const isSelected = selectedYouTubeEmbedId === sample.id;
+            return (
+              <div
+                key={sample.id}
+                onClick={() => {
+                  onURLChange(sample.url);
+                  toast.success(`Selected: ${sample.title}`);
+                }}
+                style={{
+                  padding: "14px",
+                  borderRadius: "var(--radius-md)",
+                  border: isSelected
+                    ? "1px solid var(--accent)"
+                    : "1px solid var(--border)",
+                  background: isSelected
+                    ? "var(--accent-dim)"
+                    : "var(--bg-elevated)",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  boxShadow: isSelected ? "var(--shadow-accent)" : "none",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) {
+                    (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(139,92,246,0.3)";
+                    (e.currentTarget as HTMLDivElement).style.background = "var(--bg-card)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) {
+                    (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border)";
+                    (e.currentTarget as HTMLDivElement).style.background = "var(--bg-elevated)";
+                  }
+                }}
+              >
+                <span className="badge badge-accent" style={{ alignSelf: "flex-start" }}>
                   {sample.category}
                 </span>
-                <h4 className="text-sm font-bold text-gray-900 line-clamp-2">{sample.title}</h4>
-              </div>
-
-              <div className="mt-4 flex justify-between items-center text-xs pt-2 border-t border-gray-100">
-                <span className="text-gray-500">Click to Preview & Load</span>
-                <span className="text-indigo-600 font-semibold flex items-center gap-1">
-                  Select ➔
+                <p
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: isSelected ? "var(--accent-light)" : "var(--text-primary)",
+                    lineHeight: 1.4,
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                    overflow: "hidden",
+                  }}
+                >
+                  {sample.title}
+                </p>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                    marginTop: "2px",
+                  }}
+                >
+                  {isSelected ? "✓ Selected" : "Click to select →"}
                 </span>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

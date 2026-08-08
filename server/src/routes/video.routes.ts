@@ -1,12 +1,9 @@
-
-
 import express from "express";
-import { getVideoById, uploadVideo } from "../controller/video.controller";
+import { getVideoById, uploadVideo, deleteVideo } from "../controller/video.controller";
 import { upload, validateFileType } from "../middleware/upload.middleware";
 import { extractAudio } from "../controller/audio.controller";
 import {
   transcribeAudio,
-  //   listAvailableModels,
   summarizeTranscript,
   updateTranscript,
 } from "../controller/transcribe.controller";
@@ -18,6 +15,10 @@ const router = express.Router();
 
 // SSE real-time progress stream
 router.get("/progress/:id", getProgressStream);
+
+// Reset / Cleanup endpoint (deletes video and audio files from server)
+router.delete("/reset/:id", deleteVideo);
+router.delete("/:id", deleteVideo);
 
 // Upload route with file type validation
 router.post("/upload", upload.single("video"), validateFileType, uploadVideo);
@@ -34,11 +35,10 @@ router.put("/update-transcript/:id", updateTranscript);
 // Summarize (checks if transcript exists) - Rate limited to 1 request per minute
 router.post("/summarize/:id", summarizeRateLimiter, summarizeTranscript);
 
-// List available models
-// router.get("/models", listAvailableModels);
-
+// YouTube Download Endpoint
 router.post("/youtube/download", downloadYouTubeAudio);
 
+// Fetch video state
 router.get("/get-video/:id", getVideoById);
 
 export default router;
