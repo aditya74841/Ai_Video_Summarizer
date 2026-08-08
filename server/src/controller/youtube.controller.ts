@@ -50,7 +50,7 @@ const fetchYouTubeTitleWithFallback = async (url: string, videoId: string | null
 
 export const downloadYouTubeAudio = async (req: Request, res: Response) => {
   try {
-    const { youtubeUrl, title, clientTranscript } = req.body;
+    const { youtubeUrl, title } = req.body;
 
     if (!youtubeUrl) {
       return res.status(400).json({
@@ -69,38 +69,6 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
     }
 
     const videoId = extractYouTubeVideoId(youtubeUrl);
-
-    // --- SOLUTION 1: Handle Client-Side (Browser) Extracted Transcript ---
-    if (clientTranscript && typeof clientTranscript === "string" && clientTranscript.trim().length > 0) {
-      console.log(`🚀 Received Client-Side Extracted Transcript for: ${youtubeUrl} (${clientTranscript.length} chars)`);
-      const videoTitle = title || (await fetchYouTubeTitleWithFallback(youtubeUrl, videoId));
-
-      const doc = await Video.create({
-        title: videoTitle,
-        path: youtubeUrl,
-        size: 0,
-        mimetype: "audio/mp3",
-        duration: 0,
-        transcript: clientTranscript.trim(),
-        processingStatus: "transcribed",
-        youtubeUrl: youtubeUrl,
-      });
-
-      sendProgress(doc._id.toString(), "transcribed", 100, "Captions Extracted Client-Side in Browser");
-
-      return res.status(201).json({
-        success: true,
-        message: "YouTube transcript extracted successfully client-side!",
-        video: {
-          _id: doc._id,
-          id: doc._id,
-          title: doc.title,
-          duration: doc.duration,
-          transcript: doc.transcript,
-          processingStatus: doc.processingStatus,
-        },
-      });
-    }
 
     // --- METHOD 1: Try Server-Side YouTube Caption Extraction ---
     try {
