@@ -287,15 +287,9 @@ export function useVideoPipeline() {
     // Solution 1: Try client-side (browser) caption extraction on real user IP
     let clientData: { transcript: string; title: string } | null = null;
     try {
-      toast.loading("🌐 Extracting captions in browser...", { id: "yt-client" });
       clientData = await fetchClientYouTubeData(urlToProcess);
-      if (clientData?.transcript) {
-        toast.success("✅ Captions extracted client-side!", { id: "yt-client" });
-      } else {
-        toast.dismiss("yt-client");
-      }
     } catch {
-      toast.dismiss("yt-client");
+      // Silent fallback to backend
     }
 
     try {

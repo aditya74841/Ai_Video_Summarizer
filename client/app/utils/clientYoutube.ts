@@ -24,26 +24,31 @@ export const fetchClientYouTubeData = async (
         title = data.title;
       }
     }
-  } catch (err) {
-    console.warn("⚠️ Client-side oEmbed title fetch warning:", err);
+  } catch {
+    // Graceful fallback if oEmbed is blocked
   }
 
   // 2. Fetch transcript via public CORS-friendly client microservices
   const transcriptEndpoints = [
-    `https://youtube-transcript-api.vercel.app/api/transcript?v=${videoId}`,
-    `https://yt-transcript-api.vercel.app/transcript?v=${videoId}`,
+    `https://youtube-transcript-api.vercel.app/api/transcript?videoId=${videoId}`,
+    `https://yt-transcript-api.vercel.app/api/transcript?videoId=${videoId}`,
   ];
 
   for (const endpoint of transcriptEndpoints) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-      const res = await fetch(endpoint, { signal: controller.signal });
+      const res = await fetch(endpoint, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
       clearTimeout(timeoutId);
 
       if (res.ok) {
-        const items = await res.json();
+        const data = await res.json();
+        // Check for array response or object containing transcript
+        const items = Array.isArray(data) ? data : data.transcript || data.items || data.captions;
         if (Array.isArray(items) && items.length > 0) {
           const fullTranscript = items
             .map((item: any) => item.text || item.chunk || "")
@@ -59,8 +64,8 @@ export const fetchClientYouTubeData = async (
           }
         }
       }
-    } catch (err) {
-      console.warn(`⚠️ Client transcript endpoint ${endpoint} failed:`, err);
+    } catch {
+      // Continue to next endpoint or fallback to backend
     }
   }
 
