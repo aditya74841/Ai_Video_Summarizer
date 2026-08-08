@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://videosummary.iamadityaranjan.com/sitemap.xml
