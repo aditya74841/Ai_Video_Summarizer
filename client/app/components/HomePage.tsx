@@ -110,8 +110,29 @@ export default function HomePage() {
           {/* Sticky inner container */}
           <div className="left-panel-inner">
 
-            {/* Logo */}
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "48px" }}>
+            {/* Logo — Clickable to reset to Home */}
+            <div
+              onClick={resetAll}
+              title="Go to Home"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                marginBottom: "48px",
+                cursor: "pointer",
+                userSelect: "none",
+                width: "fit-content",
+                transition: "transform 0.2s ease, opacity 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "scale(1.03)";
+                e.currentTarget.style.opacity = "0.9";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.opacity = "1";
+              }}
+            >
               <div style={{
                 width: "40px", height: "40px", borderRadius: "10px",
                 background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",

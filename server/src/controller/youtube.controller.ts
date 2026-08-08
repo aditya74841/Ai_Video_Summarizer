@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Video } from "../model/video.model";
 import { YtDlp } from "ytdlp-nodejs";
+import { YoutubeTranscript } from "youtube-transcript";
 import path from "path";
 import fs from "fs";
 import { getAudioMetadata } from "../utils/ffmpeg.util";
@@ -28,7 +29,70 @@ export const downloadYouTubeAudio = async (req: Request, res: Response) => {
       });
     }
 
-    // Get video info with player client workaround
+    // --- METHOD 1: Try Instant YouTube Caption / Subtitle Transcript API first ---
+    try {
+      console.log(`🌐 Attempting direct YouTube Caption extraction for: ${youtubeUrl}`);
+      const transcriptItems = await YoutubeTranscript.fetchTranscript(youtubeUrl);
+
+      if (transcriptItems && transcriptItems.length > 0) {
+        // Reconstruct complete transcript string across full video
+        const fullTranscript = transcriptItems
+          .map((item) => item.text)
+          .join(" ")
+          .replace(/&amp;/g, "&")
+          .replace(/&#39;/g, "'")
+          .replace(/&quot;/g, '"');
+
+        const lastChunk = transcriptItems[transcriptItems.length - 1];
+        const estimatedDuration = lastChunk ? Math.round((lastChunk.offset + lastChunk.duration) / 1000) : 0;
+
+        // Try getting official title via yt-dlp info metadata if possible, fallback gracefully
+        let videoTitle = title || "YouTube Video";
+        try {
+          const videoInfo: any = await ytdlp.getInfoAsync(youtubeUrl, {
+            additionalOptions: ["--no-warnings"],
+          } as any);
+          if (videoInfo && videoInfo.title) {
+            videoTitle = videoInfo.title;
+          }
+        } catch {
+          // If title fetch fails, continue with fallback title
+        }
+
+        // Save directly to MongoDB with "transcribed" status
+        const doc = await Video.create({
+          title: videoTitle,
+          path: youtubeUrl,
+          size: 0,
+          mimetype: "audio/mp3",
+          duration: estimatedDuration,
+          transcript: fullTranscript,
+          processingStatus: "transcribed",
+          youtubeUrl: youtubeUrl,
+        });
+
+        sendProgress(doc._id.toString(), "transcribed", 100, "YouTube Captions Extracted Instantaneously");
+        console.log(`✅ Successfully extracted YouTube transcript for video: ${doc._id}`);
+
+        return res.status(201).json({
+          success: true,
+          message: "YouTube transcript extracted successfully via Captions API",
+          video: {
+            _id: doc._id,
+            id: doc._id,
+            title: doc.title,
+            duration: doc.duration,
+            transcript: doc.transcript,
+            processingStatus: doc.processingStatus,
+          },
+        });
+      }
+    } catch (captionErr: any) {
+      console.warn("⚠️ YouTube caption extraction unavailable or failed:", captionErr.message || captionErr);
+      console.log("🔄 Falling back to yt-dlp audio download...");
+    }
+
+    // --- FALLBACK METHOD: yt-dlp Audio Download ---
     let videoInfo: any;
     try {
       videoInfo = await ytdlp.getInfoAsync(youtubeUrl, {
