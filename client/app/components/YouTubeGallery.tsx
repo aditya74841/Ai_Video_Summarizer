@@ -40,15 +40,26 @@ const SAMPLE_YOUTUBE_VIDEOS: SampleVideo[] = [
 interface YouTubeGalleryProps {
   videoURL: string;
   loading: boolean;
+  errorDetails?: {
+    code: string;
+    message: string;
+    userActionMessage?: string;
+    suggestedAction?: string;
+  } | null;
   onURLChange: (url: string) => void;
   onSubmitURL: (url?: string) => void;
+  onSwitchToUpload?: () => void;
+  onUseDemoVideo?: () => void;
 }
 
 export default function YouTubeGallery({
   videoURL,
   loading,
+  errorDetails,
   onURLChange,
   onSubmitURL,
+  onSwitchToUpload,
+  onUseDemoVideo,
 }: YouTubeGalleryProps) {
   const getYouTubeEmbedId = (url?: string) => {
     if (!url) return null;
@@ -60,6 +71,55 @@ export default function YouTubeGallery({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      {/* Structured Fallback Error Card */}
+      {errorDetails && (
+        <div
+          style={{
+            padding: "18px 20px",
+            borderRadius: "var(--radius-md)",
+            background: "rgba(239, 68, 68, 0.08)",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+            animation: "fade-in-up 0.3s ease",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "20px" }}>⚠️</span>
+            <div>
+              <h4 style={{ fontSize: "14px", fontWeight: 700, color: "#f87171", margin: 0 }}>
+                YouTube Content Restricted on Cloud Host
+              </h4>
+              <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px", lineHeight: 1.5 }}>
+                {errorDetails.userActionMessage || errorDetails.message}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "4px" }}>
+            {onSwitchToUpload && (
+              <button
+                onClick={onSwitchToUpload}
+                className="btn btn-primary"
+                style={{ padding: "8px 14px", fontSize: "12px" }}
+              >
+                📁 Upload Video / Audio File
+              </button>
+            )}
+            {onUseDemoVideo && (
+              <button
+                onClick={onUseDemoVideo}
+                className="btn btn-secondary"
+                style={{ padding: "8px 14px", fontSize: "12px" }}
+              >
+                🎬 Try 1-Click Demo Video
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* URL Input */}
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         <label

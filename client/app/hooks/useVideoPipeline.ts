@@ -29,6 +29,13 @@ export interface VideoData {
   youtubeUrl?: string;
 }
 
+export interface ApplicationErrorDetails {
+  code: string;
+  message: string;
+  userActionMessage?: string;
+  suggestedAction?: "UPLOAD_FILE" | "TRY_DEMO" | "RETRY" | "CHECK_URL";
+}
+
 export function useVideoPipeline() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -42,6 +49,7 @@ export function useVideoPipeline() {
   const [isURLMode, setIsURLMode] = useState<boolean>(false);
   const [summaryType, setSummaryType] = useState<"short" | "detailed">("short");
   const [refreshCacheTrigger, setRefreshCacheTrigger] = useState<number>(0);
+  const [errorDetails, setErrorDetails] = useState<ApplicationErrorDetails | null>(null);
 
   // Server health state for Render Free Tier cold-start monitoring
   const [serverReady, setServerReady] = useState<boolean>(false);
@@ -282,6 +290,7 @@ export function useVideoPipeline() {
     }
 
     setLoading(true);
+    setErrorDetails(null);
 
     try {
       const res = await axios.post(`${API_URL}/youtube/download`, {
@@ -291,14 +300,26 @@ export function useVideoPipeline() {
       setVideoData(res.data.video);
       router.push(`?id=${res.data.video._id}`);
     } catch (err: any) {
-      const errMsg = err.response?.data?.message || "URL processing failed";
-      toast.error(errMsg, { duration: 6000 });
-
-      // Suggest 1-Click Demo Video as a quick reliable alternative!
-      toast("💡 Tip: Try clicking '1-Click Demo Video' to test the full processing pipeline instantly!", {
-        icon: "🎬",
-        duration: 8000,
-      });
+      const errData = err.response?.data;
+      if (errData && errData.userActionMessage) {
+        setErrorDetails({
+          code: errData.code || "YOUTUBE_ACCESS_RESTRICTED",
+          message: errData.message || "YouTube processing failed",
+          userActionMessage: errData.userActionMessage,
+          suggestedAction: errData.suggestedAction || "UPLOAD_FILE",
+        });
+        toast.error(errData.userActionMessage, { duration: 7000 });
+      } else {
+        const errMsg = errData?.message || "YouTube URL processing failed";
+        toast.error(errMsg, { duration: 6000 });
+        setErrorDetails({
+          code: "YOUTUBE_ACCESS_RESTRICTED",
+          message: errMsg,
+          userActionMessage:
+            "YouTube restricted automated access for this video. You can upload the video file directly or try our 1-Click Demo Video!",
+          suggestedAction: "UPLOAD_FILE",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -396,6 +417,7 @@ export function useVideoPipeline() {
     setSseMessage("");
     setSseProgress(0);
     setSummaryType("short");
+    setErrorDetails(null);
     router.push("/");
   };
 
@@ -409,6 +431,7 @@ export function useVideoPipeline() {
     isURLMode,
     summaryType,
     refreshCacheTrigger,
+    errorDetails,
     serverReady,
     isWakingUpServer,
     sseMessage,
@@ -417,6 +440,7 @@ export function useVideoPipeline() {
     setIsURLMode,
     setVideoURL,
     setSummaryType,
+    setErrorDetails,
     handleFileChange,
     handleUpload,
     handleUseDemoVideo,

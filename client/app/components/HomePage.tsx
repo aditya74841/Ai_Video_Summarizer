@@ -33,6 +33,7 @@ export default function HomePage() {
     isURLMode,
     summaryType,
     refreshCacheTrigger,
+    errorDetails,
     sseMessage,
     sseProgress,
     steps,
@@ -378,8 +379,11 @@ export default function HomePage() {
                   <YouTubeGallery
                     videoURL={videoURL}
                     loading={loading}
+                    errorDetails={errorDetails}
                     onURLChange={setVideoURL}
                     onSubmitURL={handleUploadURL}
+                    onSwitchToUpload={() => setIsURLMode(false)}
+                    onUseDemoVideo={handleUseDemoVideo}
                   />
                 ) : (
                   <UploadPanel

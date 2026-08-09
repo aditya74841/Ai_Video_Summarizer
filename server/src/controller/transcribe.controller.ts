@@ -1,14 +1,12 @@
 import { Request, Response } from "express";
 import fs from "fs";
-import path from "path";
 import { Video } from "../model/video.model";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-// Add this import 👇
-import { GoogleAIFileManager } from "@google/generative-ai/server";
 import Groq from "groq-sdk";
 import { sendProgress } from "../utils/progress.util";
+import { normalizeTranscript } from "../utils/transcriptNormalizer.util";
+import { createAppError } from "../utils/errors.util";
 
-let genAI: GoogleGenerativeAI | null = null;
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
@@ -19,20 +17,19 @@ export const transcribeAudio = async (req: Request, res: Response) => {
 
     const video = await Video.findById(id);
     if (!video) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Video not found" });
+      return res.status(404).json(createAppError("VIDEO_NOT_FOUND", "Video record not found"));
     }
 
-    // Check if audio exists locally
     if (!video.audioPath || !fs.existsSync(video.audioPath)) {
-      return res.status(400).json({
-        success: false,
-        message: "Audio file not found. Run extract-audio first.",
-      });
+      return res.status(400).json(
+        createAppError(
+          "MEDIA_DOWNLOAD_FAILED",
+          "Audio file not found on server. Extract audio or upload file first."
+        )
+      );
     }
 
-    sendProgress(id, "transcribing", 30, "Transcribing Audio with Whisper AI...");
+    sendProgress(id, "transcribing", 30, "Transcribing Audio with Groq Whisper AI...");
 
     const transcription = await groq.audio.transcriptions.create({
       file: fs.createReadStream(video.audioPath),
@@ -40,25 +37,30 @@ export const transcribeAudio = async (req: Request, res: Response) => {
       temperature: 0,
     });
 
-    // Save to DB
-    video.transcript = transcription.text;
+    const normalized = normalizeTranscript(transcription.text);
+
+    // Save normalized transcript to DB
+    video.transcript = normalized.text;
     video.processingStatus = "transcribed";
-    
-    // Cleanup: Delete audio file from server disk to reduce load & save storage space
+    if (!video.transcriptSource) {
+      video.transcriptSource = "media_whisper";
+    }
+
+    // Cleanup: Delete audio file from server disk to save space
     if (video.audioPath && fs.existsSync(video.audioPath)) {
       try {
         fs.unlinkSync(video.audioPath);
-        console.log(`🗑️ Successfully deleted audio file from server: ${video.audioPath}`);
+        console.log(`🗑️ Successfully deleted temporary audio file: ${video.audioPath}`);
       } catch (unlinkErr) {
-        console.warn(`⚠️ Failed to delete audio file: ${unlinkErr}`);
+        console.warn(`⚠️ Failed to delete temporary audio file: ${unlinkErr}`);
       }
     }
 
-    // Cleanup: Delete original video file if it still exists on disk
+    // Cleanup: Delete original video file if local upload
     if (video.path && fs.existsSync(video.path) && !video.youtubeUrl) {
       try {
         fs.unlinkSync(video.path);
-        console.log(`🗑️ Successfully deleted video file from server: ${video.path}`);
+        console.log(`🗑️ Successfully deleted temporary video file: ${video.path}`);
       } catch (unlinkErr) {
         console.warn(`⚠️ Failed to delete video file: ${unlinkErr}`);
       }
@@ -68,28 +70,26 @@ export const transcribeAudio = async (req: Request, res: Response) => {
     video.audioUrl = undefined;
     await video.save();
 
-    sendProgress(id, "transcribed", 100, "Transcription Completed");
+    sendProgress(id, "transcribed", 100, "Whisper AI Transcription Completed");
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Transcription complete and audio file cleaned up from server",
-      transcript: transcription,
+      transcript: transcription.text,
     });
   } catch (err: any) {
     console.error("Transcription error:", err.message || err);
-    
-    // Catch Groq 413 Request Entity Too Large error
-    if (err.status === 413 || (err.message && err.message.includes("413")) || (err.message && err.message.includes("request_too_large"))) {
-      return res.status(413).json({
-        success: false,
-        message: "Audio file is too large for the Groq Whisper API (25MB max limit). Please choose a shorter video or smaller file size.",
-      });
+
+    if (err.status === 413 || (err.message && err.message.includes("413"))) {
+      return res.status(413).json(
+        createAppError(
+          "TRANSCRIPTION_FAILED",
+          "Audio file is too large for the Groq Whisper API (25MB max limit)."
+        )
+      );
     }
 
-    res.status(500).json({
-      success: false,
-      message: err.message || "Transcription failed",
-    });
+    return res.status(500).json(createAppError("TRANSCRIPTION_FAILED", err.message));
   }
 };
 
@@ -99,31 +99,26 @@ export const summarizeTranscript = async (req: Request, res: Response) => {
 
     const video = await Video.findById(id);
     if (!video) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Video not found" });
+      return res.status(404).json(createAppError("VIDEO_NOT_FOUND", "Video record not found"));
     }
 
-    // Extract requested summary type ("short" or "detailed", default to "short")
     const { editedTranscript, summaryType = "short" } = req.body || {};
     const mode = summaryType === "detailed" ? "detailed" : "short";
 
     if (editedTranscript && typeof editedTranscript === "string") {
       video.transcript = editedTranscript;
-      video.summary = undefined; // Force regenerate summary with edited transcript
+      video.summary = undefined; // Reset summary to regenerate with edited transcript
     }
 
-    // If summaryType changed or user requested regeneration, reset summary
     if (video.summaryType !== mode) {
       video.summary = undefined;
       video.summaryType = mode;
     }
 
     if (!video.transcript) {
-      return res.status(400).json({
-        success: false,
-        message: "Transcript missing. Run /transcribe/:id first",
-      });
+      return res.status(400).json(
+        createAppError("TRANSCRIPT_NOT_AVAILABLE", "Transcript missing. Run transcription first.")
+      );
     }
 
     if (video.summary) {
@@ -135,16 +130,17 @@ export const summarizeTranscript = async (req: Request, res: Response) => {
       });
     }
 
-    // Truncate transcript if excessively long (safeguard against TPM limits)
-    const maxChars = 24000; // ~6000 tokens max input
-    const safeTranscript = video.transcript.length > maxChars 
-      ? video.transcript.slice(0, maxChars) + "\n...[Transcript truncated due to length]" 
-      : video.transcript;
+    // Normalize transcript and enforce safe context length (~24,000 chars / ~6,000 tokens)
+    const normalized = normalizeTranscript(video.transcript);
+    const safeTranscript = normalized.text;
 
     const cleanAiSummary = (text: string): string => {
       if (!text) return "";
       return text
-        .replace(/^(Here is a summary of the transcript:|Here is the summary:|Here is a summary:|Here's a summary of the transcript:|Sure! Here is the summary:)\s*/i, "")
+        .replace(
+          /^(Here is a summary of the transcript:|Here is the summary:|Here is a summary:|Here's a summary of the transcript:|Sure! Here is the summary:)\s*/i,
+          ""
+        )
         .trim();
     };
 
@@ -182,12 +178,7 @@ ${safeTranscript}
     try {
       // Primary LLM Provider: Groq (llama-3.3-70b-versatile)
       const chatCompletion = await groq.chat.completions.create({
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
+        messages: [{ role: "user", content: prompt }],
         model: "llama-3.3-70b-versatile",
         temperature: 0.3,
         max_completion_tokens: 2048,
@@ -215,7 +206,7 @@ ${safeTranscript}
     }
 
     if (!summary) {
-      throw new Error("Failed to generate summary from both primary and fallback AI models.");
+      throw createAppError("SUMMARY_FAILED", "Failed to generate summary from primary and fallback AI models.");
     }
 
     video.summary = summary;
@@ -224,7 +215,7 @@ ${safeTranscript}
 
     sendProgress(id, "summarized", 100, "Summary Completed Successfully");
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       summary,
       processingStatus: video.processingStatus,
@@ -241,42 +232,28 @@ ${safeTranscript}
     } catch {}
 
     const isRateLimit = err.status === 429 || err.code === "rate_limit_exceeded" || err.message?.includes("rate_limit");
-    const statusCode = isRateLimit ? 429 : 500;
-    const clientMessage = isRateLimit 
-      ? "AI provider rate limit reached. Please wait a moment before requesting another summary."
-      : err.message || "Summarization failed";
-
-    res.status(statusCode).json({
-      success: false,
-      message: clientMessage,
-    });
+    const errCode = isRateLimit ? "SUMMARY_FAILED" : "SUMMARY_FAILED";
+    return res.status(isRateLimit ? 429 : 500).json(createAppError(errCode, err.message));
   }
 };
 
-/**
- * Endpoint to explicitly save user transcript edits before summarizing
- */
 export const updateTranscript = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { transcript } = req.body;
 
     if (!transcript || typeof transcript !== "string") {
-      return res.status(400).json({
-        success: false,
-        message: "Transcript content is required",
-      });
+      return res.status(400).json(createAppError("TRANSCRIPT_NOT_AVAILABLE", "Transcript content is required"));
     }
 
     const video = await Video.findById(id);
     if (!video) {
-      return res.status(404).json({
-        success: false,
-        message: "Video not found",
-      });
+      return res.status(404).json(createAppError("VIDEO_NOT_FOUND", "Video record not found"));
     }
 
-    video.transcript = transcript;
+    const normalized = normalizeTranscript(transcript);
+
+    video.transcript = normalized.text;
     video.summary = undefined; // Reset summary so new transcript can be summarized
     if (video.processingStatus === "summarized") {
       video.processingStatus = "transcribed";
@@ -289,9 +266,6 @@ export const updateTranscript = async (req: Request, res: Response) => {
       video,
     });
   } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Failed to update transcript",
-    });
+    return res.status(500).json(createAppError("TRANSCRIPTION_FAILED", err.message));
   }
 };
