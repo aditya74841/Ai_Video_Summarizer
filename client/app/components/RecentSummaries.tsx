@@ -179,10 +179,8 @@ export default function RecentSummaries({ onSelectSummary, refreshTrigger }: Rec
                       >
                         {item.title}
                       </h3>
-                      <span
-                        className={item.youtubeUrl ? "badge badge-danger" : "badge badge-neutral"}
-                      >
-                        {item.youtubeUrl ? "YouTube" : "File"}
+                      <span className="badge badge-neutral">
+                        Video File
                       </span>
                     </div>
                     <p style={{ fontSize: "11px", color: "var(--text-muted)" }}>

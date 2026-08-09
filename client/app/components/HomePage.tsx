@@ -6,12 +6,10 @@ import ProcessingSteps from "./ ProcessingSteps";
 import ContentCard from "./ContentCard";
 import RecentSummaries from "./RecentSummaries";
 import UploadPanel from "./UploadPanel";
-import YouTubeGallery from "./YouTubeGallery";
 import MediaHeaderBanner from "./MediaHeaderBanner";
 import SummaryTypeSelector from "./SummaryTypeSelector";
 import PipelineActions from "./PipelineActions";
 import SseProgressBar from "./SseProgressBar";
-import YouTubePlayerCard from "./YouTubePlayerCard";
 import AudioStreamPlayer from "./AudioStreamPlayer";
 import { useVideoPipeline } from "../hooks/useVideoPipeline";
 
@@ -29,21 +27,15 @@ export default function HomePage() {
     currentStep,
     uploadProgress,
     loading,
-    videoURL,
-    isURLMode,
     summaryType,
     refreshCacheTrigger,
-    errorDetails,
     sseMessage,
     sseProgress,
     steps,
-    setIsURLMode,
-    setVideoURL,
     setSummaryType,
     handleFileChange,
     handleUpload,
     handleUseDemoVideo,
-    handleUploadURL,
     handleExtractAudio,
     handleTranscribe,
     handleSaveTranscriptEdit,
@@ -52,14 +44,6 @@ export default function HomePage() {
     resetAll,
     handleSelectCachedSummary,
   } = useVideoPipeline();
-
-  const getYouTubeEmbedId = (url?: string) => {
-    if (!url) return null;
-    const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
-    return match ? match[1] : null;
-  };
-
-  const youtubeEmbedId = getYouTubeEmbedId(videoData?.youtubeUrl || (isURLMode ? videoURL : ""));
 
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg-base)", color: "var(--text-primary)" }}>
@@ -97,7 +81,7 @@ export default function HomePage() {
           position: "absolute", top: "10%", left: "50%", transform: "translateX(-50%)",
           width: "1px", height: "80%",
           background: "linear-gradient(to bottom, transparent, rgba(139,92,246,0.15), rgba(139,92,246,0.25), rgba(139,92,246,0.15), transparent)",
-          display: "none",  // overridden by CSS media query below
+          display: "none",
         }} className="desktop-divider-glow" />
       </div>
 
@@ -171,7 +155,7 @@ export default function HomePage() {
                 lineHeight: 1.8,
                 maxWidth: "340px",
               }}>
-                Drop any video or paste a YouTube link. We extract audio, transcribe every word, and distill the key insights using AI.
+                Drop any video file or try our 1-click demo video. We extract audio, transcribe every word, and distill key insights using AI.
               </p>
             </div>
 
@@ -341,60 +325,16 @@ export default function HomePage() {
           {/* ── No video loaded: Input UI ── */}
           {!videoData ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-              {/* Tab + Input Card */}
+              {/* Input Card */}
               <div className="card animate-fade-up" style={{ padding: "28px" }}>
-                {/* Mode Switcher */}
-                <div style={{
-                  display: "flex",
-                  background: "var(--bg-elevated)",
-                  borderRadius: "var(--radius-md)",
-                  padding: "4px",
-                  border: "1px solid var(--border)",
-                  marginBottom: "28px",
-                }}>
-                  {[
-                    { label: "Upload File", icon: "📁", key: false as boolean },
-                    { label: "YouTube", icon: "▶️", key: true as boolean },
-                  ].map(({ label, icon, key }) => (
-                    <button
-                      key={String(key)}
-                      onClick={() => setIsURLMode(key)}
-                      style={{
-                        flex: 1, padding: "10px 16px", fontSize: "13px",
-                        fontWeight: 600, borderRadius: "9px", border: "none",
-                        cursor: "pointer", transition: "all 0.2s ease",
-                        background: isURLMode === key ? "var(--bg-card)" : "transparent",
-                        color: isURLMode === key ? "var(--text-primary)" : "var(--text-muted)",
-                        boxShadow: isURLMode === key ? "var(--shadow-sm)" : "none",
-                        display: "flex", alignItems: "center", justifyContent: "center", gap: "7px",
-                      }}
-                    >
-                      <span>{icon}</span>
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {isURLMode ? (
-                  <YouTubeGallery
-                    videoURL={videoURL}
-                    loading={loading}
-                    errorDetails={errorDetails}
-                    onURLChange={setVideoURL}
-                    onSubmitURL={handleUploadURL}
-                    onSwitchToUpload={() => setIsURLMode(false)}
-                    onUseDemoVideo={handleUseDemoVideo}
-                  />
-                ) : (
-                  <UploadPanel
-                    file={file}
-                    loading={loading}
-                    uploadProgress={uploadProgress}
-                    onFileChange={handleFileChange}
-                    onUpload={handleUpload}
-                    onUseDemoVideo={handleUseDemoVideo}
-                  />
-                )}
+                <UploadPanel
+                  file={file}
+                  loading={loading}
+                  uploadProgress={uploadProgress}
+                  onFileChange={handleFileChange}
+                  onUpload={handleUpload}
+                  onUseDemoVideo={handleUseDemoVideo}
+                />
               </div>
 
               <RecentSummaries
@@ -413,8 +353,6 @@ export default function HomePage() {
                 channels={videoData.channels}
                 processingStatus={videoData.processingStatus}
               />
-
-              <YouTubePlayerCard youtubeEmbedId={youtubeEmbedId} />
 
               <AudioStreamPlayer
                 audioUrl={videoData.audioUrl}

@@ -15,10 +15,9 @@ const videoSchema = new mongoose.Schema(
     transcript: { type: String },
     summary: { type: String },
     summaryType: { type: String, enum: ["short", "detailed"], default: "short" },
-    youtubeUrl: { type: String },
     transcriptSource: {
       type: String,
-      enum: ["youtube_captions", "media_whisper", "local_upload"],
+      enum: ["media_whisper", "local_upload"],
     },
     errorCode: { type: String },
     errorMessage: { type: String },
@@ -27,8 +26,6 @@ const videoSchema = new mongoose.Schema(
       enum: [
         "uploaded",
         "validating",
-        "fetching_transcript",
-        "downloading_media",
         "audio_extracted",
         "transcribing",
         "transcribed",

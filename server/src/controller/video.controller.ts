@@ -125,8 +125,8 @@ export const deleteVideo = async (req: Request, res: Response) => {
         }
       }
 
-      // 2. Delete original video file from disk if present (excluding YouTube URLs)
-      if (video.path && fs.existsSync(video.path) && !video.youtubeUrl) {
+      // 2. Delete original video file from disk if present
+      if (video.path && fs.existsSync(video.path)) {
         try {
           fs.unlinkSync(video.path);
           console.log(`🗑️ Reset cleanup: Deleted video file ${video.path}`);

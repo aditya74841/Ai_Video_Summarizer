@@ -9,7 +9,6 @@ export interface CachedSummary {
   transcript?: string;
   summary: string;
   createdAt: number; // timestamp in ms
-  youtubeUrl?: string;
   duration?: number;
 }
 

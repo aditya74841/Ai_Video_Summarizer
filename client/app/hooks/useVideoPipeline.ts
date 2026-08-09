@@ -26,14 +26,6 @@ export interface VideoData {
   transcript?: string;
   summary?: string;
   summaryType?: "short" | "detailed";
-  youtubeUrl?: string;
-}
-
-export interface ApplicationErrorDetails {
-  code: string;
-  message: string;
-  userActionMessage?: string;
-  suggestedAction?: "UPLOAD_FILE" | "TRY_DEMO" | "RETRY" | "CHECK_URL";
 }
 
 export function useVideoPipeline() {
@@ -45,11 +37,8 @@ export function useVideoPipeline() {
   const [currentStep, setCurrentStep] = useState<ProcessingStep>("upload");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
-  const [videoURL, setVideoURL] = useState<string>("");
-  const [isURLMode, setIsURLMode] = useState<boolean>(false);
   const [summaryType, setSummaryType] = useState<"short" | "detailed">("short");
   const [refreshCacheTrigger, setRefreshCacheTrigger] = useState<number>(0);
-  const [errorDetails, setErrorDetails] = useState<ApplicationErrorDetails | null>(null);
 
   // Server health state for Render Free Tier cold-start monitoring
   const [serverReady, setServerReady] = useState<boolean>(false);
@@ -185,7 +174,6 @@ export function useVideoPipeline() {
             transcript: video.transcript,
             summary: video.summary,
             createdAt: Date.now(),
-            youtubeUrl: video.youtubeUrl,
             duration: video.duration,
           });
           setRefreshCacheTrigger(Date.now());
@@ -205,7 +193,6 @@ export function useVideoPipeline() {
       processingStatus: "summarized",
       transcript: cached.transcript,
       summary: cached.summary,
-      youtubeUrl: cached.youtubeUrl,
     });
     setCurrentStep("complete");
     toast.success("Loaded summary from local offline cache!");
@@ -278,49 +265,6 @@ export function useVideoPipeline() {
       await handleUpload(demoFile);
     } catch (err: any) {
       toast.error(err.message || "Failed to load demo video", { id: "demo-load" });
-      setLoading(false);
-    }
-  };
-
-  const handleUploadURL = async (targetUrl?: string) => {
-    const urlToProcess = targetUrl || videoURL;
-    if (!urlToProcess) {
-      toast.error("Please select or enter a YouTube video URL");
-      return;
-    }
-
-    setLoading(true);
-    setErrorDetails(null);
-
-    try {
-      const res = await axios.post(`${API_URL}/youtube/download`, {
-        youtubeUrl: urlToProcess,
-      });
-      toast.success("YouTube URL accepted!");
-      setVideoData(res.data.video);
-      router.push(`?id=${res.data.video._id}`);
-    } catch (err: any) {
-      const errData = err.response?.data;
-      if (errData && errData.userActionMessage) {
-        setErrorDetails({
-          code: errData.code || "YOUTUBE_ACCESS_RESTRICTED",
-          message: errData.message || "YouTube processing failed",
-          userActionMessage: errData.userActionMessage,
-          suggestedAction: errData.suggestedAction || "UPLOAD_FILE",
-        });
-        toast.error(errData.userActionMessage, { duration: 7000 });
-      } else {
-        const errMsg = errData?.message || "YouTube URL processing failed";
-        toast.error(errMsg, { duration: 6000 });
-        setErrorDetails({
-          code: "YOUTUBE_ACCESS_RESTRICTED",
-          message: errMsg,
-          userActionMessage:
-            "YouTube restricted automated access for this video. You can upload the video file directly or try our 1-Click Demo Video!",
-          suggestedAction: "UPLOAD_FILE",
-        });
-      }
-    } finally {
       setLoading(false);
     }
   };
@@ -413,11 +357,9 @@ export function useVideoPipeline() {
     setCurrentStep("upload");
     setUploadProgress(0);
     setLoading(false);
-    setVideoURL("");
     setSseMessage("");
     setSseProgress(0);
     setSummaryType("short");
-    setErrorDetails(null);
     router.push("/");
   };
 
@@ -427,24 +369,17 @@ export function useVideoPipeline() {
     currentStep,
     uploadProgress,
     loading,
-    videoURL,
-    isURLMode,
     summaryType,
     refreshCacheTrigger,
-    errorDetails,
     serverReady,
     isWakingUpServer,
     sseMessage,
     sseProgress,
     steps,
-    setIsURLMode,
-    setVideoURL,
     setSummaryType,
-    setErrorDetails,
     handleFileChange,
     handleUpload,
     handleUseDemoVideo,
-    handleUploadURL,
     handleExtractAudio,
     handleTranscribe,
     handleSaveTranscriptEdit,

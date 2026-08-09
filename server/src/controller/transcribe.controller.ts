@@ -23,7 +23,7 @@ export const transcribeAudio = async (req: Request, res: Response) => {
     if (!video.audioPath || !fs.existsSync(video.audioPath)) {
       return res.status(400).json(
         createAppError(
-          "MEDIA_DOWNLOAD_FAILED",
+          "TRANSCRIPT_NOT_AVAILABLE",
           "Audio file not found on server. Extract audio or upload file first."
         )
       );
@@ -56,8 +56,8 @@ export const transcribeAudio = async (req: Request, res: Response) => {
       }
     }
 
-    // Cleanup: Delete original video file if local upload
-    if (video.path && fs.existsSync(video.path) && !video.youtubeUrl) {
+    // Cleanup: Delete original video file
+    if (video.path && fs.existsSync(video.path)) {
       try {
         fs.unlinkSync(video.path);
         console.log(`🗑️ Successfully deleted temporary video file: ${video.path}`);

@@ -7,7 +7,6 @@ import {
   summarizeTranscript,
   updateTranscript,
 } from "../controller/transcribe.controller";
-import { downloadYouTubeAudio } from "../controller/youtube.controller";
 import { transcribeRateLimiter, summarizeRateLimiter } from "../middleware/rateLimiter.middleware";
 import { getProgressStream } from "../controller/progress.controller";
 
@@ -34,9 +33,6 @@ router.put("/update-transcript/:id", updateTranscript);
 
 // Summarize (checks if transcript exists) - Rate limited to 1 request per minute
 router.post("/summarize/:id", summarizeRateLimiter, summarizeTranscript);
-
-// YouTube Download Endpoint
-router.post("/youtube/download", downloadYouTubeAudio);
 
 // Fetch video state
 router.get("/get-video/:id", getVideoById);
